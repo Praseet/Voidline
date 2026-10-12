@@ -34,11 +34,20 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     [Tooltip("Rock prefabs used only as distant scenery. Their colliders and gameplay behaviours are disabled.")]
     [SerializeField] private GameObject[] backdropRockPrefabs;
     [SerializeField, Min(1f)] private float firstBackdropRockDistance = 1f;
-    [SerializeField, Min(40f)] private float backdropRockSpacing = 46f;
-    [SerializeField, Min(30f)] private float backdropRockCleanupBehindZ = 48f;
-    [SerializeField] private Vector2 backdropXRange = new Vector2(18f, 38f);
-    [SerializeField] private Vector2 backdropYRange = new Vector2(9f, 22f);
+    [SerializeField, Min(40f)] private float backdropRockSpacing = 64f;
+    [SerializeField, Min(30f)] private float backdropRockCleanupBehindZ = 80f;
+    [SerializeField, Min(300f)] private float backdropSpawnDistance = 520f;
+    [SerializeField, Min(20f)] private float backdropScaleInDistance = 105f;
+    [SerializeField] private Vector2 backdropXRange = new Vector2(85f, 155f);
+    [SerializeField] private Vector2 backdropYRange = new Vector2(32f, 82f);
     [SerializeField] private Vector2 backdropScaleRange = new Vector2(6f, 12f);
+
+    [Header("Sector Transitions")]
+    [SerializeField, Min(1f)] private float sectorTransitionDuration = 8f;
+    [SerializeField, Min(300f)] private float sectorMonumentSpawnDistance = 440f;
+    [SerializeField] private Vector2 sectorMonumentXRange = new Vector2(100f, 155f);
+    [SerializeField] private Vector2 sectorMonumentYRange = new Vector2(36f, 82f);
+    [SerializeField] private Vector2 sectorMonumentScaleRange = new Vector2(20f, 28f);
 
     private sealed class RendererState
     {
@@ -65,10 +74,27 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     private bool activeLandmarkIsGate;
     private bool activeLandmarkResolved;
     private Material previousSkybox;
+    private Material activeSkyboxMaterial;
+    private Material ownedSectorSkybox;
     private Material runtimeFallbackSkybox;
     private Texture2D runtimeFallbackSkyTexture;
     private AmbientMode previousAmbientMode;
     private float previousAmbientIntensity;
+    private bool previousFog;
+    private Color baseSkyTint = Color.white;
+    private float baseSkyExposure = 1f;
+    private float baseSectorAmbientIntensity = 0.46f;
+    private Color sectorSkyStartTint = Color.white;
+    private Color sectorSkyTargetTint = Color.white;
+    private float sectorSkyStartExposure = 1f;
+    private float sectorSkyTargetExposure = 1f;
+    private float sectorAmbientStart;
+    private float sectorAmbientTarget;
+    private float sectorTransitionElapsed;
+    private bool sectorTransitionActive;
+    private int crossedLandmarks;
+    private readonly Dictionary<GameObject, Vector3> backdropTargetScales =
+        new Dictionary<GameObject, Vector3>(16);
     private float distanceTravelled;
     private float nextLandmarkAt;
     private int landmarkIndex;
@@ -88,6 +114,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         previousSkybox = RenderSettings.skybox;
         previousAmbientMode = RenderSettings.ambientMode;
         previousAmbientIntensity = RenderSettings.ambientIntensity;
+        previousFog = RenderSettings.fog;
 
         if (installSpaceSkybox)
         {
@@ -97,7 +124,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             Material darkSpaceSky = Resources.Load<Material>("M_VOIDLINE_DarkSpace");
             if (darkSpaceSky != null && HasCompleteSixSidedSkybox(darkSpaceSky))
             {
-                RenderSettings.skybox = darkSpaceSky;
+                // Transitions mutate a private material instance, never the imported asset.
+                ownedSectorSkybox = new Material(darkSpaceSky)
+                {
+                    name = "VOIDLINE / Runtime Sector Sky",
+                    hideFlags = HideFlags.DontSave
+                };
+                RenderSettings.skybox = ownedSectorSkybox;
             }
             else
             {
@@ -108,10 +141,24 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                     Debug.LogWarning("VOIDLINE could not find a valid skybox or the built-in Panoramic shader.");
             }
 
-            if (RenderSettings.skybox != null)
+            activeSkyboxMaterial = RenderSettings.skybox;
+            if (activeSkyboxMaterial != null)
             {
+                baseSkyTint = activeSkyboxMaterial.HasProperty("_Tint")
+                    ? activeSkyboxMaterial.GetColor("_Tint")
+                    : Color.white;
+                sectorSkyStartTint = baseSkyTint;
+                sectorSkyTargetTint = baseSkyTint;
+                baseSkyExposure = activeSkyboxMaterial.HasProperty("_Exposure")
+                    ? activeSkyboxMaterial.GetFloat("_Exposure")
+                    : 1f;
+                sectorSkyStartExposure = baseSkyExposure;
+                sectorSkyTargetExposure = baseSkyExposure;
                 RenderSettings.ambientMode = AmbientMode.Skybox;
                 RenderSettings.ambientIntensity = Mathf.Min(ambientLightScale, 0.46f);
+                baseSectorAmbientIntensity = RenderSettings.ambientIntensity;
+                sectorAmbientStart = baseSectorAmbientIntensity;
+                sectorAmbientTarget = baseSectorAmbientIntensity;
                 RenderSettings.fog = false;
                 DynamicGI.UpdateEnvironment();
             }
@@ -236,6 +283,193 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         return material;
     }
 
+    private void BeginSectorTransition()
+    {
+        crossedLandmarks++;
+        if (activeSkyboxMaterial != null)
+        {
+            sectorSkyStartTint = activeSkyboxMaterial.HasProperty("_Tint")
+                ? activeSkyboxMaterial.GetColor("_Tint")
+                : baseSkyTint;
+            sectorSkyStartExposure = activeSkyboxMaterial.HasProperty("_Exposure")
+                ? activeSkyboxMaterial.GetFloat("_Exposure")
+                : baseSkyExposure;
+        }
+        sectorAmbientStart = RenderSettings.ambientIntensity;
+
+        // Four distinct moods for one continuous route. The palette changes at a real
+        // arch/gate crossing, never by snapping on score frames while the player is mid-flight.
+        Color tintMultiplier;
+        float exposureMultiplier;
+        float ambientMultiplier;
+        switch ((crossedLandmarks - 1) % 4)
+        {
+            case 0: // Ion Veil
+                tintMultiplier = new Color(0.72f, 0.96f, 1.24f, 1f);
+                exposureMultiplier = 1.02f;
+                ambientMultiplier = 0.94f;
+                break;
+            case 1: // Ember Drift
+                tintMultiplier = new Color(1.22f, 0.78f, 0.54f, 1f);
+                exposureMultiplier = 0.86f;
+                ambientMultiplier = 0.82f;
+                break;
+            case 2: // Violet Hollow
+                tintMultiplier = new Color(0.82f, 0.68f, 1.28f, 1f);
+                exposureMultiplier = 0.92f;
+                ambientMultiplier = 0.88f;
+                break;
+            default: // Verdigris Wake
+                tintMultiplier = new Color(0.62f, 1.12f, 0.96f, 1f);
+                exposureMultiplier = 0.98f;
+                ambientMultiplier = 0.90f;
+                break;
+        }
+
+        sectorSkyTargetTint = MultiplySkyTint(baseSkyTint, tintMultiplier);
+        sectorSkyTargetExposure = Mathf.Clamp(baseSkyExposure * exposureMultiplier, 0.02f, 2f);
+        sectorAmbientTarget = baseSectorAmbientIntensity * ambientMultiplier;
+        sectorTransitionElapsed = 0f;
+        sectorTransitionActive = true;
+        SpawnSectorMonument((crossedLandmarks - 1) % 4);
+    }
+
+    private void UpdateSectorTransition(float deltaTime)
+    {
+        if (!sectorTransitionActive) return;
+        sectorTransitionElapsed = Mathf.Min(sectorTransitionDuration,
+            sectorTransitionElapsed + Mathf.Max(0f, deltaTime));
+        float t = Mathf.Clamp01(sectorTransitionElapsed / Mathf.Max(0.01f, sectorTransitionDuration));
+        float eased = t * t * (3f - 2f * t);
+
+        if (activeSkyboxMaterial != null)
+        {
+            if (activeSkyboxMaterial.HasProperty("_Tint"))
+                activeSkyboxMaterial.SetColor("_Tint",
+                    Color.Lerp(sectorSkyStartTint, sectorSkyTargetTint, eased));
+            if (activeSkyboxMaterial.HasProperty("_Exposure"))
+                activeSkyboxMaterial.SetFloat("_Exposure",
+                    Mathf.Lerp(sectorSkyStartExposure, sectorSkyTargetExposure, eased));
+        }
+        RenderSettings.ambientIntensity = Mathf.Lerp(sectorAmbientStart, sectorAmbientTarget, eased);
+
+        if (t >= 1f)
+        {
+            sectorTransitionActive = false;
+            if (activeSkyboxMaterial != null && RenderSettings.skybox == activeSkyboxMaterial)
+                DynamicGI.UpdateEnvironment();
+        }
+    }
+
+    private static Color MultiplySkyTint(Color baseTint, Color multiplier)
+    {
+        return new Color(
+            Mathf.Clamp(baseTint.r * multiplier.r, 0f, 1.25f),
+            Mathf.Clamp(baseTint.g * multiplier.g, 0f, 1.25f),
+            Mathf.Clamp(baseTint.b * multiplier.b, 0f, 1.25f),
+            baseTint.a);
+    }
+
+    private void ResetSectorPresentation()
+    {
+        sectorTransitionActive = false;
+        sectorTransitionElapsed = 0f;
+        sectorSkyStartTint = baseSkyTint;
+        sectorSkyTargetTint = baseSkyTint;
+        sectorSkyStartExposure = baseSkyExposure;
+        sectorSkyTargetExposure = baseSkyExposure;
+        sectorAmbientStart = baseSectorAmbientIntensity;
+        sectorAmbientTarget = baseSectorAmbientIntensity;
+
+        if (activeSkyboxMaterial != null)
+        {
+            if (activeSkyboxMaterial.HasProperty("_Tint"))
+                activeSkyboxMaterial.SetColor("_Tint", baseSkyTint);
+            if (activeSkyboxMaterial.HasProperty("_Exposure"))
+                activeSkyboxMaterial.SetFloat("_Exposure", baseSkyExposure);
+        }
+
+        RenderSettings.ambientIntensity = baseSectorAmbientIntensity;
+        if (activeSkyboxMaterial != null && RenderSettings.skybox == activeSkyboxMaterial)
+            DynamicGI.UpdateEnvironment();
+    }
+
+    private void SpawnSectorMonument(int paletteIndex)
+    {
+        if (backdropRandom == null)
+            backdropRandom = new System.Random(routeDirector != null ? routeDirector.RunSeed ^ 0x5EED : 260412);
+
+        // Sector identity changes the silhouette, not just the color grade. Use the designed
+        // hollow-arch asset as the first arrival cue; reserve a giant natural rock for the next
+        // mood and keep the engineered gate rare. Each one remains distant, non-interactive art.
+        GameObject prefab = null;
+        Vector2 cueScaleRange = sectorMonumentScaleRange;
+        switch (paletteIndex % 4)
+        {
+            case 0:
+                if (hollowAsteroidPrefab == null)
+                    hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
+                prefab = hollowAsteroidPrefab;
+                cueScaleRange = new Vector2(7f, 10f);
+                break;
+            case 1:
+                cueScaleRange = new Vector2(20f, 28f);
+                break;
+            case 2:
+                if (hollowAsteroidPrefab == null)
+                    hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
+                prefab = hollowAsteroidPrefab;
+                cueScaleRange = new Vector2(6f, 9f);
+                break;
+            default:
+                if (transitGatePrefab == null)
+                    transitGatePrefab = Resources.Load<GameObject>("PF_AncientTransitGate");
+                prefab = transitGatePrefab;
+                cueScaleRange = new Vector2(3f, 5f);
+                break;
+        }
+
+        if (prefab == null && backdropRockPrefabs != null && backdropRockPrefabs.Length > 0)
+        {
+            int start = paletteIndex % backdropRockPrefabs.Length;
+            for (int attempt = 0; attempt < backdropRockPrefabs.Length && prefab == null; attempt++)
+                prefab = backdropRockPrefabs[(start + attempt) % backdropRockPrefabs.Length];
+        }
+        if (prefab == null) return;
+
+        float z = Mathf.Max(300f,
+            sectorMonumentSpawnDistance + NextBackdropFloat(-35f, 65f));
+        float absoluteDistance = routeDirector != null
+            ? routeDirector.DistanceTravelled + z
+            : distanceTravelled + z;
+        Vector3 routeOffset = routeDirector != null
+            ? routeDirector.GetCenterOffsetAtDistance(absoluteDistance)
+            : Vector3.zero;
+        float side = crossedLandmarks % 2 == 0 ? -1f : 1f;
+        float x = side * NextBackdropFloat(sectorMonumentXRange.x, sectorMonumentXRange.y);
+        float y = NextBackdropFloat(sectorMonumentYRange.x, sectorMonumentYRange.y)
+            * (paletteIndex % 2 == 0 ? 1f : -1f);
+        Quaternion rotation = Quaternion.Euler(
+            NextBackdropFloat(-18f, 18f),
+            NextBackdropFloat(0f, 360f),
+            NextBackdropFloat(-22f, 22f));
+
+        GameObject monument = Instantiate(prefab,
+            new Vector3(routeOffset.x + x, routeOffset.y + y, z), rotation, transform);
+        monument.name = paletteIndex % 4 == 0 || paletteIndex % 4 == 2
+            ? "VOIDLINE / Sector Hollow-Arch Silhouette"
+            : paletteIndex % 4 == 3
+                ? "VOIDLINE / Distant Transit Relic"
+                : "VOIDLINE / Sector Asteroid Scale Cue";
+        PrepareAsNonInteractiveScenery(monument);
+
+        Vector3 targetScale = monument.transform.localScale
+            * NextBackdropFloat(cueScaleRange.x, cueScaleRange.y);
+        monument.transform.localScale = targetScale * 0.012f;
+        backdropTargetScales[monument] = targetScale;
+        backdropRocks.Add(monument);
+    }
+
     /// <summary>Reset non-serialized scene state for a fresh Play Mode entry.</summary>
     public void ResetForRun()
     {
@@ -244,6 +478,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             resetRequestedBeforeAwake = true;
             distanceTravelled = 0f;
             landmarkIndex = 0;
+            crossedLandmarks = 0;
             return;
         }
         ResetForRunCore();
@@ -266,8 +501,11 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             else DestroyImmediate(backdropRocks[i]);
         }
         backdropRocks.Clear();
+        backdropTargetScales.Clear();
         distanceTravelled = 0f;
         landmarkIndex = 0;
+        crossedLandmarks = 0;
+        ResetSectorPresentation();
         nextLandmarkAt = firstLandmarkDistance;
         nextBackdropRockAt = firstBackdropRockDistance;
         backdropRandom = new System.Random(routeDirector != null ? routeDirector.RunSeed ^ 0x5EED : 260412);
@@ -338,6 +576,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
 
+        UpdateSectorTransition(dt);
         float speed = corridorScroller != null ? corridorScroller.Speed : 12f;
         float distanceStep = Mathf.Max(0f, speed * dt);
         distanceTravelled += distanceStep;
@@ -355,6 +594,10 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 if (gameManager == null) gameManager = FindAnyObjectByType<VoidlineGameManager>();
                 if (gameManager != null)
                     gameManager.RegisterPassageCrossed(activeLandmarkIsGate);
+
+                // The structure is the threshold: the next sector's sky, ambient character,
+                // and distant scale cue begin changing only after the player physically crosses it.
+                BeginSectorTransition();
             }
 
             if (currentZ < -cleanupBehindZ)
@@ -453,14 +696,29 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             if (rock == null)
             {
                 backdropRocks.RemoveAt(i);
+                backdropTargetScales.Remove(rock);
                 continue;
             }
 
             rock.transform.position += Vector3.back * distanceStep;
+            if (backdropTargetScales.TryGetValue(rock, out Vector3 targetScale))
+            {
+                float scaleStep = Mathf.Max(0f, distanceStep) *
+                    targetScale.magnitude / Mathf.Max(1f, backdropScaleInDistance);
+                rock.transform.localScale = Vector3.MoveTowards(
+                    rock.transform.localScale, targetScale, scaleStep);
+                if ((rock.transform.localScale - targetScale).sqrMagnitude < 0.0001f)
+                {
+                    rock.transform.localScale = targetScale;
+                    backdropTargetScales.Remove(rock);
+                }
+            }
+
             if (rock.transform.position.z < -backdropRockCleanupBehindZ)
             {
                 Destroy(rock);
                 backdropRocks.RemoveAt(i);
+                backdropTargetScales.Remove(rock);
             }
         }
     }
@@ -477,9 +735,9 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             prefab = backdropRockPrefabs[backdropRandom.Next(0, backdropRockPrefabs.Length)];
         if (prefab == null) return;
 
-        // Start far enough out for silhouettes to enter the view naturally, rather than
-        // materialising just beyond the near edge of the visible play space.
-        float z = Mathf.Max(320f, spawnAheadZ + NextBackdropFloat(135f, 245f));
+        // Spawn beyond the near visual field. New scenery scales in over travelled distance,
+        // so a full-size mesh never suddenly appears in the player's peripheral vision.
+        float z = Mathf.Max(backdropSpawnDistance, spawnAheadZ + NextBackdropFloat(335f, 445f));
         Vector3 routeOffset = routeDirector != null
             ? routeDirector.GetCenterOffsetAtDistance(routeDirector.DistanceTravelled + z)
             : Vector3.zero;
@@ -495,7 +753,10 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         GameObject rock = Instantiate(prefab,
             new Vector3(routeOffset.x + x, routeOffset.y + y, z), rotation, transform);
         rock.name = "VOIDLINE / Distant Asteroid";
-        rock.transform.localScale *= NextBackdropFloat(backdropScaleRange.x, backdropScaleRange.y);
+        Vector3 targetScale = rock.transform.localScale
+            * NextBackdropFloat(backdropScaleRange.x, backdropScaleRange.y);
+        rock.transform.localScale = targetScale * 0.012f;
+        backdropTargetScales[rock] = targetScale;
 
         Collider[] colliders = rock.GetComponentsInChildren<Collider>(true);
         for (int i = 0; i < colliders.Length; i++)
@@ -660,18 +921,29 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         ApplyTunnelVisibility(1f);
     }
 
+    private void RestoreRenderSettings()
+    {
+        RenderSettings.skybox = previousSkybox;
+        RenderSettings.ambientMode = previousAmbientMode;
+        RenderSettings.ambientIntensity = previousAmbientIntensity;
+        RenderSettings.fog = previousFog;
+    }
+
     private void OnDisable()
     {
         RestoreTunnelState();
+        // Play Mode exits can disable scene behaviours without destroying the scene object.
+        // Restore global render state here, not only in OnDestroy.
+        RestoreRenderSettings();
     }
 
     private void OnDestroy()
     {
         RestoreTunnelState();
+        RestoreRenderSettings();
+
+        if (ownedSectorSkybox != null) Destroy(ownedSectorSkybox);
         if (runtimeFallbackSkybox != null) Destroy(runtimeFallbackSkybox);
         if (runtimeFallbackSkyTexture != null) Destroy(runtimeFallbackSkyTexture);
-        RenderSettings.skybox = previousSkybox;
-        RenderSettings.ambientMode = previousAmbientMode;
-        RenderSettings.ambientIntensity = previousAmbientIntensity;
     }
 }

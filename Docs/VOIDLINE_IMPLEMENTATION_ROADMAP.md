@@ -1,9 +1,9 @@
 # VOIDLINE — Implementation Roadmap
 
-**Updated:** 2026-10-12  
+**Updated:** 2026-10-13  
 **Canonical plan:** this file  
 **Engine:** Unity 6 / URP / Windows x64  
-**Current focus:** single-route cleanup, dark-space art direction and adaptive soundtrack; then encounter/collision/creature work.
+**Current focus:** Phase 3 — deep-space composition, longer object approach, and score/structure-driven sector transitions. Keep encounter and collision tuning in step with the environment; creature work follows after sector readability is established.
 
 ## North star
 
@@ -18,7 +18,7 @@ VOIDLINE is a fast, cinematic 2.5D survival-flight game: steer a fragile courier
 - No generated beam lattices, unexplained black/metallic hoops, parallel tunnel scaffolding, neon guide rails or repeated structural frames just to decorate the view.
 - Every environment object must be identifiable at gameplay scale, serve a clear gameplay/readability purpose, or be removed.
 - Prefer existing imported assets and correct materials over primitive placeholder shapes. No smooth black oval debris clutter.
-- Use the imported AllSky Free **Night MoonBurst** asset as the default space skybox. The previously used Space_AnotherPlanet background read too light for the requested look.
+- Use the darkened SpaceSkies Free Purple cubemap for the local working environment. If its licensed source pack is absent in a clean checkout, use the project-owned procedural star/nebula panorama fallback; do not include Asset Store source textures in Git. The lighter Space_AnotherPlanet backdrop was rejected.
 - No external music files were found in the project asset scan. The current adaptive score is a procedurally generated fallback, layered under event SFX; do not claim an imported soundtrack exists unless an actual audio asset is located and assigned.
 - **Superseded:** the Space Threat (Free Action Music) pack is now imported and wired into `VoidlineAdaptiveMusic`. See the Current baseline section and `Docs/QA_CHECKLIST.md`; treat this line as historical.
 
@@ -44,16 +44,16 @@ VOIDLINE is a fast, cinematic 2.5D survival-flight game: steer a fragile courier
 - Keep the EnsureControlPoint cache-recovery fix.
 **Gate:** same-seed route reproducibility and route-frame alignment remain stable in a fresh Editor run.
 
-### Phase 2 — Remove route-fork prototype and establish the actual space look (current)
+### Phase 2 — Remove route-fork prototype and establish the actual space look (implemented; see Phase 3 checks)
 - Remove all functional multi-route behavior, branch offsets, branch rewards, route-choice callouts, generated motes and added oval debris.
 - Preserve a temporary no-op compatibility component only if needed to avoid a missing scene script while the Unity Editor pipeline is unresponsive; remove its scene component with the Editor API when the pipeline becomes available.
-- Make AllSky Free Night MoonBurst the primary M_VOIDLINE_SpaceSkybox resource while preserving the existing target GUID, so the main game uses the darker panorama consistently.
+- Keep SpaceSkies Free Purple as the preferred local sky through the project-owned M_VOIDLINE_DarkSpace resource; keep a self-contained procedural panorama fallback so public checkouts do not depend on licensed Asset Store textures. The active scene must not directly serialize a reference to an excluded source asset.
 - Keep the intro tunnel hidden in open space and retire its segments behind the camera. It must never recycle into view.
 - Keep real gates/arches as occasional large, traversable landmarks; avoid additional beam structures.
 - Keep the adaptive score layered by ambient exploration, boost, pressure/critical hull and pause/game-over state. Existing impact/pickup/roll sounds remain one-shot effects, not a substitute for music.
 **Gate:** no fork logic or cue objects remain active; the dark asset is loaded by the main game; the opening corridor never returns; a fresh compile and Editor run show no new errors.
 
-### Phase 3 — Space environment and asset pass
+### Phase 3 — Space environment and asset pass (active)
 - Review the scene through the real game camera, not only the Scene view.
 - Compose a dark near-black/navy starfield with one or two giant scale cues, sparse debris silhouettes and deliberate negative space around the player/hazards.
 - Use imported Kenney MoonRock/Meteor/Crystal models and existing Ancient Transit Gate/Hollow Asteroid Arch assets where appropriate; do not keep smooth placeholder ovals if the silhouette is wrong.
@@ -94,7 +94,7 @@ VOIDLINE is a fast, cinematic 2.5D survival-flight game: steer a fragile courier
 
 - Existing: seeded spline, route-local ship/camera, starter corridor retirement, space landmarks, encounter pacing, asteroid/repair pooling, boost/roll, passage scoring and near-miss/flow feedback.
 - Experimental branching was rejected and is being removed. No multiple routes are part of the design.
-- The dark AllSky Free Night MoonBurst material is installed as the main Resources skybox source. Asset copy preserves the existing M_VOIDLINE_SpaceSkybox.mat.meta GUID.
+- The local development tree uses the SpaceSkies Free Purple cubemap through M_VOIDLINE_DarkSpace (kept local-only); a clean checkout falls back to a procedural dark panorama. The active main scene does not directly reference the excluded licensed asset.
 - The authored Blender courier (`Resources/VOIDLINE_Courier.fbx`, 10,084 tris) is the player ship and is confirmed rendering in Play Mode at scale 0.42. It previously never appeared because a serialized Kenney placeholder short-circuited the build path; see `Docs/QA_CHECKLIST.md` for the fix and the measured evidence. Bespoke creature encounters remain pending.
 - The smooth black oval cue objects were generated by the experimental branch controller; that controller has been replaced by a no-op compatibility shim pending Editor API removal of its serialized component. Its visual-generation code is no longer present.
 - The soundtrack is the imported **Space Threat (Free Action Music)** pack. `VoidlineAdaptiveMusic`

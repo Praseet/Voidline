@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: VoidlineRunSettings
   m_EditorClassIdentifier: Assembly-CSharp::VoidlineRunSettings
   worldSpeed: 12
-  spawnAheadDistance: 78
+  spawnAheadDistance: 140
   startingHull: 3
   initialSpawnInterval: 1.45
   minimumSpawnInterval: 0.7
@@ -23,4 +23,4 @@ MonoBehaviour:
   spawnZBackJitter: 8
   pickupInterval: 16
   repairScoreBonus: 100
-  spawnZForwardJitter: 18
+  spawnZForwardJitter: 28
