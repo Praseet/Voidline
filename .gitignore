@@ -112,3 +112,49 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Local MCP endpoint config contains editor access credentials
+.mcp.json
+/Assets/Temp/
+/Assets/_Recovery/
+/Assets/Third Party/AllSkyFree/
+/Assets/Third Party/kenney_modular-space-kit_1.0/
+/Assets/Third Party/moon_rock_03_4k.blend/
+/Assets/Space Threat (Action Cinematic Music)/
+/Assets/Temp.meta
+/Assets/_Recovery.meta
+/Assets/Resources.meta
+/Assets/Resources/Space Threat*.wav*
+/Assets/Resources/M_VOIDLINE_SpaceSkybox.mat*
+/Assets/Space Threat (Action Cinematic Music).meta
+/Assets/Third Party/AllSkyFree.meta
+/Assets/Third Party/kenney_modular-space-kit_1.0.meta
+/Assets/Third Party/moon_rock_03_4k.blend.meta
+/Assets/VOIDLINE/Art/SpaceSkiesPurple2K/
+/Assets/VOIDLINE/Art/SpaceSkiesPurple2K.meta
+/Assets/VOIDLINE/Resources/M_VOIDLINE_DarkSpace.mat*
+/Assets/Third Party/kenney_space-kit/Instructions.url*
+/Assets/Third Party/kenney_space-kit/Kenney.url*
+/Assets/Third Party/kenney_space-kit/Patreon.url*
+/Assets/Third Party/kenney_space-kit/Preview.png*
+/Assets/Third Party/kenney_space-kit/Sample.png*
+/Assets/Third Party/kenney_space-kit/Isometric/
+/Assets/Third Party/kenney_space-kit/Isometric.meta
+/Assets/Third Party/kenney_space-kit/Side/
+/Assets/Third Party/kenney_space-kit/Side.meta
+/Assets/Third Party/kenney_space-kit/Models/FBX format/
+/Assets/Third Party/kenney_space-kit/Models/FBX format.meta
+/Assets/Third Party/kenney_space-kit/Models/OBJ format/
+/Assets/Third Party/kenney_space-kit/Models/OBJ format.meta
+/Assets/Third Party/kenney_space-kit/Models/GLTF format/
+/Assets/Third Party/kenney_space-kit/Models/GLTF format.meta
+/Assets/Third Party/kenney_space-kit/Models/STL format/
+/Assets/Third Party/kenney_space-kit/Models/STL format.meta
+/Assets/Third Party/kenney_space-kit/Models/DAE format/*.dae
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/meteor_detailed.dae
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/rock_crystals.dae
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/rocket_fuelA.dae
+/Assets/Third Party/kenney_space-kit/Models/DAE format/*.dae.meta
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/meteor_detailed.dae.meta
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/rock_crystals.dae.meta
+!/Assets/Third Party/kenney_space-kit/Models/DAE format/rocket_fuelA.dae.meta
