@@ -47,6 +47,8 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     [SerializeField, Min(300f)] private float sectorMonumentSpawnDistance = 440f;
     [SerializeField] private Vector2 sectorMonumentXRange = new Vector2(100f, 155f);
     [SerializeField] private Vector2 sectorMonumentYRange = new Vector2(36f, 82f);
+    [Tooltip("Scales the configured far-field offsets inward so large sector landmarks remain inside the gameplay camera view.")]
+    [SerializeField, Range(0.2f, 0.6f)] private float sectorMonumentOffsetScale = 0.42f;
     [SerializeField] private Vector2 sectorMonumentScaleRange = new Vector2(20f, 28f);
 
     private sealed class RendererState
@@ -403,25 +405,21 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         // hollow-arch asset as the first arrival cue; reserve a giant natural rock for the next
         // mood and keep the engineered gate rare. Each one remains distant, non-interactive art.
         GameObject prefab = null;
+        bool createNaturalArchCue = paletteIndex % 4 == 0 || paletteIndex % 4 == 2;
         Vector2 cueScaleRange = sectorMonumentScaleRange;
         switch (paletteIndex % 4)
         {
             case 0:
-                if (hollowAsteroidPrefab == null)
-                    hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
-                prefab = hollowAsteroidPrefab;
-                // This FBX is already ~28–30 Unity units across: keep its authored scale.
-                cueScaleRange = new Vector2(0.75f, 1.15f);
+                // Use the known asteroid meshes to build an irregular natural arch. The
+                // imported arch prefab root does not expose a reliable readable silhouette.
+                cueScaleRange = new Vector2(2.4f, 3.0f);
                 break;
             case 1:
                 // The natural rock mesh is small, so it can be magnified to read as a scale cue.
                 cueScaleRange = new Vector2(20f, 28f);
                 break;
             case 2:
-                if (hollowAsteroidPrefab == null)
-                    hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
-                prefab = hollowAsteroidPrefab;
-                cueScaleRange = new Vector2(0.85f, 1.3f);
+                cueScaleRange = new Vector2(2.6f, 3.2f);
                 break;
             default:
                 if (transitGatePrefab == null)
@@ -432,13 +430,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 break;
         }
 
-        if (prefab == null && backdropRockPrefabs != null && backdropRockPrefabs.Length > 0)
+        if (prefab == null && !createNaturalArchCue && backdropRockPrefabs != null && backdropRockPrefabs.Length > 0)
         {
             int start = paletteIndex % backdropRockPrefabs.Length;
             for (int attempt = 0; attempt < backdropRockPrefabs.Length && prefab == null; attempt++)
                 prefab = backdropRockPrefabs[(start + attempt) % backdropRockPrefabs.Length];
         }
-        if (prefab == null) return;
+        if (prefab == null && !createNaturalArchCue) return;
 
         float z = Mathf.Max(300f,
             sectorMonumentSpawnDistance + NextBackdropFloat(-35f, 65f));
@@ -449,18 +447,23 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             ? routeDirector.GetCenterOffsetAtDistance(absoluteDistance)
             : Vector3.zero;
         float side = crossedLandmarks % 2 == 0 ? -1f : 1f;
-        float x = side * NextBackdropFloat(sectorMonumentXRange.x, sectorMonumentXRange.y);
+        float cueOffsetScale = Mathf.Clamp(sectorMonumentOffsetScale > 0f ? sectorMonumentOffsetScale : 0.42f, 0.2f, 0.6f);
+        float x = side * NextBackdropFloat(sectorMonumentXRange.x, sectorMonumentXRange.y) * cueOffsetScale;
         float y = NextBackdropFloat(sectorMonumentYRange.x, sectorMonumentYRange.y)
-            * (paletteIndex % 2 == 0 ? 1f : -1f);
+            * (paletteIndex % 2 == 0 ? 1f : -1f) * cueOffsetScale;
         Quaternion rotation = Quaternion.Euler(
             NextBackdropFloat(-18f, 18f),
             NextBackdropFloat(0f, 360f),
             NextBackdropFloat(-22f, 22f));
 
-        GameObject monument = Instantiate(prefab,
-            new Vector3(routeOffset.x + x, routeOffset.y + y, z), rotation, transform);
-        monument.name = paletteIndex % 4 == 0 || paletteIndex % 4 == 2
-            ? "VOIDLINE / Sector Hollow-Arch Silhouette"
+        Vector3 cuePosition = new Vector3(routeOffset.x + x, routeOffset.y + y, z);
+        GameObject monument = createNaturalArchCue
+            ? CreateNaturalAsteroidArch(cuePosition, rotation)
+            : Instantiate(prefab, cuePosition, rotation, transform);
+        if (createNaturalArchCue)
+            monument.transform.SetParent(transform, true);
+        monument.name = createNaturalArchCue
+            ? "VOIDLINE / Sector Natural Asteroid Arch"
             : paletteIndex % 4 == 3
                 ? "VOIDLINE / Distant Transit Relic"
                 : "VOIDLINE / Sector Asteroid Scale Cue";
