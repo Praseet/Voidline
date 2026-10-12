@@ -410,22 +410,25 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 if (hollowAsteroidPrefab == null)
                     hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
                 prefab = hollowAsteroidPrefab;
-                cueScaleRange = new Vector2(7f, 10f);
+                // This FBX is already ~28–30 Unity units across: keep its authored scale.
+                cueScaleRange = new Vector2(0.75f, 1.15f);
                 break;
             case 1:
+                // The natural rock mesh is small, so it can be magnified to read as a scale cue.
                 cueScaleRange = new Vector2(20f, 28f);
                 break;
             case 2:
                 if (hollowAsteroidPrefab == null)
                     hollowAsteroidPrefab = Resources.Load<GameObject>("PF_HollowAsteroidArch");
                 prefab = hollowAsteroidPrefab;
-                cueScaleRange = new Vector2(6f, 9f);
+                cueScaleRange = new Vector2(0.85f, 1.3f);
                 break;
             default:
                 if (transitGatePrefab == null)
                     transitGatePrefab = Resources.Load<GameObject>("PF_AncientTransitGate");
                 prefab = transitGatePrefab;
-                cueScaleRange = new Vector2(3f, 5f);
+                // A gate is a rare landmark, but its imported bounds already define a large relic.
+                cueScaleRange = new Vector2(1.2f, 2.0f);
                 break;
         }
 
