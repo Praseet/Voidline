@@ -146,11 +146,12 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 ? celestialAssetSet.PickSpaceSkybox(routeDirector != null ? routeDirector.RunSeed : 260412)
                 : null;
             Shader celestialShader = Shader.Find("Skybox/VOIDLINE Celestial Blend");
+            bool installedCelestialSky = false;
             if (panorama != null && celestialShader != null)
             {
                 ownedSectorSkybox = new Material(celestialShader)
                 {
-                    name = "VOIDLINE / Multi-Nebula Celestial World",
+                    name = "VOIDLINE / Layered Celestial Sky",
                     hideFlags = HideFlags.DontSave
                 };
                 ownedSectorSkybox.SetTexture("_TexA", panorama);
@@ -158,11 +159,11 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 ownedSectorSkybox.SetFloat("_Blend", 0f);
                 currentSpacePanorama = panorama;
                 RenderSettings.skybox = ownedSectorSkybox;
+                installedCelestialSky = true;
             }
             else if (panorama != null)
             {
-                // Texture panorama fallback, still uses the actual downloaded art if the
-                // custom blend shader has not imported yet.
+                // Still use the actual downloaded panorama if the crossfade shader is not available.
                 Shader panoramicShader = Shader.Find("Skybox/Panoramic");
                 if (panoramicShader != null)
                 {
@@ -178,11 +179,11 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                     if (ownedSectorSkybox.HasProperty("_Rotation")) ownedSectorSkybox.SetFloat("_Rotation", 0f);
                     currentSpacePanorama = panorama;
                     RenderSettings.skybox = ownedSectorSkybox;
+                    installedCelestialSky = true;
                 }
             }
 
-            if (RenderSettings.skybox != ownedSectorSkybox && importedSky != null &&
-                HasCompleteSixSidedSkybox(importedSky))
+            if (!installedCelestialSky && importedSky != null && HasCompleteSixSidedSkybox(importedSky))
             {
                 ownedSectorSkybox = new Material(importedSky)
                 {
@@ -190,15 +191,18 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                     hideFlags = HideFlags.DontSave
                 };
                 RenderSettings.skybox = ownedSectorSkybox;
+                installedCelestialSky = true;
             }
 
-            if (RenderSettings.skybox != ownedSectorSkybox)
+            if (!installedCelestialSky)
             {
-                // A vivid procedural fallback exists only if the external panorama has not
-                // been downloaded or a valid authored space material is not present.
+                // A vivid procedural fallback exists only until the authentic free panorama set is imported.
                 runtimeFallbackSkybox = CreateProceduralFallbackSkybox(out runtimeFallbackSkyTexture);
                 if (runtimeFallbackSkybox != null)
+                {
                     RenderSettings.skybox = runtimeFallbackSkybox;
+                    installedCelestialSky = true;
+                }
                 else
                     Debug.LogWarning("VOIDLINE could not find a valid celestial panorama or the built-in Panoramic shader.");
             }
