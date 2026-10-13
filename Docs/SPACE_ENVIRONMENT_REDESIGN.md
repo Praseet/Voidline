@@ -47,3 +47,14 @@ The remote development-machine session was unavailable during this environment r
 - Future enemy silhouettes remain readable in front of the brightest parts of the sky and during boost.
 
 Do not mark the redesign complete based on successful compilation alone; adjust the composition after the first real Game-view capture.
+
+
+## Sky asset credits and bundled derivatives
+
+The three images bundled with VOIDLINE are optimised derivatives of these source works by TonyS / Space Spheremaps:
+
+- Multi Nebulae 1 — https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_1.png
+- Galactic Plane 1 — https://www.spacespheremaps.com/wp-content/uploads/galactic_plane_1.png
+- Blue Nebulae 1 — https://www.spacespheremaps.com/wp-content/uploads/blue_nebulae_1.png
+
+The full sources are 10,000×5,000 PNGs. VOIDLINE includes resized 4,096×2,048 JPEG adaptations (quality 86, 4:4:4 colour sampling) to keep the game repository and GPU footprint small. Space Spheremaps describes these assets as available for personal and commercial use, with permission to adapt; the site's terms say attribution is not required, but credit is appreciated. The panoramas are bundled as actual default game assets in `Assets/VOIDLINE/Resources/SpacePanoramas`, not as URLs downloaded at runtime.
