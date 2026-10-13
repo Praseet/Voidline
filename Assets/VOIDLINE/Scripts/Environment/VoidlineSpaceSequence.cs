@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -71,6 +72,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     private VoidlineGameManager gameManager;
     private VoidlineCelestialAssetSet celestialAssetSet;
     private VoidlineCelestialBackdrop celestialBackdrop;
+    private Texture2D[] bundledSpacePanoramas;
     private GameObject activeLandmark;
     private readonly List<GameObject> backdropRocks = new List<GameObject>(3);
     private System.Random backdropRandom;
@@ -127,19 +129,27 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
 
         celestialAssetSet = Resources.Load<VoidlineCelestialAssetSet>("VOIDLINE_CelestialAssetSet")
             ?? celestialAssetSet;
+        // The new official panorama art ships under Resources, so clean checkouts get the
+        // replacement sky without downloading, importing a package, or running an Editor menu.
+        bundledSpacePanoramas = Resources.LoadAll<Texture2D>("SpacePanoramas");
+        if (bundledSpacePanoramas != null)
+        {
+            Array.Sort(bundledSpacePanoramas, (a, b) => string.CompareOrdinal(
+                a != null ? a.name : string.Empty, b != null ? b.name : string.Empty));
+        }
 
         if (installSpaceSkybox)
         {
             // First choice is real, authored 10k multicolour nebula panoramas. The former
             // near-black SpaceSkies material is intentionally not selected as the environment.
             Texture2D panorama = null;
-            if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
+            int panoramaCount = GetSpacePanoramaCount();
+            if (panoramaCount > 0)
             {
                 int seed = routeDirector != null ? routeDirector.RunSeed : 260412;
-                initialSpacePanoramaIndex = Mathf.Abs(seed == int.MinValue ? 0 : seed) %
-                    Mathf.Max(1, celestialAssetSet.SpacePanoramaCount);
+                initialSpacePanoramaIndex = Mathf.Abs(seed == int.MinValue ? 0 : seed) % panoramaCount;
                 currentSpacePanoramaIndex = initialSpacePanoramaIndex;
-                panorama = celestialAssetSet.PickSpacePanorama(currentSpacePanoramaIndex);
+                panorama = GetSpacePanorama(currentSpacePanoramaIndex);
             }
 
             Material importedSky = celestialAssetSet != null
@@ -361,6 +371,21 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         return material;
     }
 
+    private int GetSpacePanoramaCount()
+    {
+        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
+            return celestialAssetSet.SpacePanoramaCount;
+        return bundledSpacePanoramas != null ? bundledSpacePanoramas.Length : 0;
+    }
+
+    private Texture2D GetSpacePanorama(int index)
+    {
+        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
+            return celestialAssetSet.PickSpacePanorama(index);
+        if (bundledSpacePanoramas == null || bundledSpacePanoramas.Length == 0) return null;
+        return bundledSpacePanoramas[Mathf.Abs(index) % bundledSpacePanoramas.Length];
+    }
+
     private void BeginSectorTransition()
     {
         crossedLandmarks++;
@@ -411,13 +436,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         // Crossfade into a genuinely different authored panorama on each sector crossing.
         // This replaces the original same-texture colour-only "transition".
         targetSpacePanorama = null;
-        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 1 &&
+        if (GetSpacePanoramaCount() > 1 &&
             activeSkyboxMaterial != null && activeSkyboxMaterial.HasProperty("_TexA") &&
             activeSkyboxMaterial.HasProperty("_TexB") && activeSkyboxMaterial.HasProperty("_Blend") &&
             currentSpacePanorama != null)
         {
-            targetSpacePanoramaIndex = (currentSpacePanoramaIndex + 1) % celestialAssetSet.SpacePanoramaCount;
-            targetSpacePanorama = celestialAssetSet.PickSpacePanorama(targetSpacePanoramaIndex);
+            targetSpacePanoramaIndex = (currentSpacePanoramaIndex + 1) % GetSpacePanoramaCount();
+            targetSpacePanorama = GetSpacePanorama(targetSpacePanoramaIndex);
             if (targetSpacePanorama != null)
             {
                 activeSkyboxMaterial.SetTexture("_TexA", currentSpacePanorama);
@@ -491,8 +516,8 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         sectorAmbientTarget = baseSectorAmbientIntensity;
         targetSpacePanorama = null;
         currentSpacePanoramaIndex = initialSpacePanoramaIndex;
-        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
-            currentSpacePanorama = celestialAssetSet.PickSpacePanorama(initialSpacePanoramaIndex);
+        if (GetSpacePanoramaCount() > 0)
+            currentSpacePanorama = GetSpacePanorama(initialSpacePanoramaIndex);
 
         if (activeSkyboxMaterial != null)
         {
