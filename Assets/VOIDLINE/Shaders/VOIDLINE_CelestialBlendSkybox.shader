@@ -45,6 +45,9 @@ Shader "Skybox/VOIDLINE Celestial Blend"
             {
                 v2f o;
                 o.position = UnityObjectToClipPos(v.vertex);
+                // Match Unity's standard skybox depth behaviour: force the cube to the far plane
+                // so the panorama stays behind the ship, HUD, planets and future enemy silhouettes.
+                o.position.z = o.position.w;
                 o.direction = v.vertex.xyz;
                 return o;
             }
