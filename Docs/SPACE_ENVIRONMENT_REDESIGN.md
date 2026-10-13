@@ -3,29 +3,30 @@
 **Status:** environment implementation prepared on branch `environment/celestial-world-redesign`; Unity visual acceptance pending.
 **Art direction:** bright, expansive, colourful deep space — not the nearly-black purple panorama with rocks as the only depth cue.
 
-## Asset choice
+## The sky asset is being replaced completely
 
-Use **[Procedural Planet Generation - Lite: Baked Planets and Simple Procedural Shaders](https://marketplace.unity.com/packages/vfx/shaders/procedural-planet-generation-lite-baked-planets-and-simple-proce-296362)** as the primary authored celestial package. Its listed contents include planet and moon materials, gas giants, asteroid rings, stars/coronas, atmospheric glow, and a static 4K space skybox; its January 2026 release adds 12 sample planets. It is listed as free and compatible with URP in Unity 6.
+The primary sky is no longer `M_VOIDLINE_DarkSpace` and no longer depends on the old dark panorama or its procedural nebula fallback. The new primary art is three distinct, real 10,000×5,000 equirectangular images from **[Space Spheremaps](https://www.spacespheremaps.com/)**, imported into the project's Art folder:
 
-The package's [Lite Samples Pack documentation](https://parallelcascades.com/procedural-planet-generation/latest/lite-samples-pack/) documents gas-giant bands, ring systems, star surfaces, atmosphere glow and its asset-generation tools. Keep the original asset files inside the locally imported Asset Store package: this repository stores references to them, not copies of licensed source files.
+- [Multi Nebulae 1](https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_1.png): richly multicoloured nebula clouds.
+- [Galactic Plane 1](https://www.spacespheremaps.com/wp-content/uploads/galactic_plane_1.png): a brighter Milky Way-style star/galaxy band.
+- [Blue Nebulae 1](https://www.spacespheremaps.com/wp-content/uploads/blue_nebulae_1.png): a cyan/blue-biased nebula for a cooler sector.
 
-An optional static-only alternative is [Space Skyboxes 4K Free](https://marketplace.unity.com/packages/2d/textures-materials/sky/space-skyboxes-4k-free-354458). Its current listing is compatible with URP and is 683 MB, so do not import the entire pack in addition to the primary package unless its specific skybox gives a clear art-direction improvement.
+The official [Multi-nebulae page](https://www.spacespheremaps.com/multi-nebulae-spheremaps/), [Galactic Plane page](https://www.spacespheremaps.com/galactic-plane-spheremaps/) and [Blue Nebulae page](https://www.spacespheremaps.com/blue-nebulae-spheremaps/) list these PNGs at about 11 MB each. The author's [licensing terms](https://www.spacespheremaps.com/about/) explicitly permit use and modification in commercial games; no attribution is required, but credit is appreciated. Source textures are downloaded into `Assets/VOIDLINE/Art/External/SpaceSpheremaps`; this is real authored background art, not a generated colour grade.
 
-## New composition
+A new `Skybox/VOIDLINE Celestial Blend` shader crossfades between those panoramas when the player passes a sector landmark. That changes the underlying sky image rather than only tinting one texture. The editor importer also creates a serialized Resources material so the shader is explicitly referenced by player builds. Panorama import settings use high-quality texture compression, mipmaps, texture streaming, and an 8K max import size to balance detail with GPU memory.
 
-The environment now has two visual depths:
+## Celestial bodies
 
-1. **The celestial skybox:** the imported 4K star/nebula/galaxy panorama. Keep its colour and exposure vibrant enough to convey wonder, with cyan/blue gas clouds, violet/magenta filaments and bright stellar clusters.
-2. **Slow-moving 3D celestial bodies:** a large warm gas giant with rings toward one edge, a contrasting oceanic/terrestrial planet toward the other, a much smaller moon in the upper/outer field, and a small luminous star. These are placed at roughly 965–1,690 world units so they read as distant worlds rather than encounter obstacles. All colliders are disabled and all renderers have shadows disabled.
+The skybox provides the large-scale stars, galaxies, nebulae, and star clusters. The world-dressing layer adds four distant 3D bodies: a warm gas giant with rings, a contrasting terrestrial/oceanic planet, a small moon, and a luminous star. The outer framing is asymmetric so the central flight/enemy lane stays readable. These bodies have colliders and shadow casting disabled and remain inside the current 1,800-unit far clip.
 
-The runtime composition is deliberately asymmetric and uses a few large landmarks rather than a uniform field of tiny rocks. That gives the eye scale and direction while preserving the visual simplicity needed for speed.
+For more detailed planetary surface materials, the optional free [Procedural Planet Generation - Lite](https://marketplace.unity.com/packages/vfx/shaders/procedural-planet-generation-lite-baked-planets-and-simple-proce-296362) pack can be imported. The builder references its local planet/gas-giant/moon materials, baked colour textures and prefabs; it does not copy its licensed source files. The celestial sky does **not** require that package, because the panorama downloader supplies the primary sky art directly.
 
-## Install and populate the asset references
+## Use the new sky in Unity
 
-1. In Unity's Package Manager, open **My Assets**, find Procedural Planet Generation - Lite, download it, and import the needed skybox and celestial shader/material samples. Do not import all 683 MB of the optional static-sky package as a first step.
-2. In the editor, run **VOIDLINE → Environment → Build Celestial Asset Set**.
-3. Open `Assets/VOIDLINE/Resources/VOIDLINE_CelestialAssetSet.asset`. Review its arrays. The builder auto-fills categories when it finds matching names, including baked colour textures as well as materials/prefabs. Asset-pack naming can vary; if a slot is empty, drag the matching imported skybox/material/colour texture/prefab into that array. Keep the references pointed at the original imported assets. The runtime prefers the package's authored material, then its baked colour texture, and only then uses the procedural fallback texture.
-4. Enter Play Mode. `VoidlineSpaceSequence` loads `VOIDLINE_CelestialAssetSet`, installs the selected celestial skybox instead of `M_VOIDLINE_DarkSpace`, and creates the far-field planet composition. If the optional package is absent, a brighter colourful fallback keeps the run playable; this is not the intended final art.
+1. Pull the `environment/celestial-world-redesign` branch (or use its pull request).
+2. In Unity, run **VOIDLINE → Environment → Download Multicolour Space Panoramas (33 MB)** once. This fetches the three licensed PNGs, imports them with the correct equirectangular texture settings, generates the Resources blend material, and writes the image references into `Assets/VOIDLINE/Resources/VOIDLINE_CelestialAssetSet.asset`.
+3. Enter Play Mode. The runtime selects an authored panorama instead of the old dark sky, slowly drifts it, and crossfades to another panorama on actual landmark crossing. It builds the distant planetary layer and still supports a procedural fallback only if an external image download fails.
+4. For higher-detail planet surfaces, import Procedural Planet Generation - Lite and run **VOIDLINE → Environment → Build Celestial Asset Set**. Inspect its populated arrays and replace any incorrect auto-matched material/texture by reference to the proper imported source asset.
 
 ## Future enemy readability
 
