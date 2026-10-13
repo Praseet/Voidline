@@ -352,16 +352,25 @@ public sealed class VoidlineCelestialBackdrop : MonoBehaviour
         for (int i = bodies.Count - 1; i >= 0; i--)
             if (bodies[i].root != null) Destroy(bodies[i].root);
         bodies.Clear();
+        ReleaseGeneratedAssets();
+    }
+
+    private void ReleaseGeneratedAssets()
+    {
+        for (int i = 0; i < ownedMaterials.Count; i++)
+            if (ownedMaterials[i] != null) Destroy(ownedMaterials[i]);
+        ownedMaterials.Clear();
+        for (int i = 0; i < ownedTextures.Count; i++)
+            if (ownedTextures[i] != null) Destroy(ownedTextures[i]);
+        ownedTextures.Clear();
+        for (int i = 0; i < ownedMeshes.Count; i++)
+            if (ownedMeshes[i] != null) Destroy(ownedMeshes[i]);
+        ownedMeshes.Clear();
     }
 
     private void OnDestroy()
     {
         ClearBodies();
-        for (int i = 0; i < ownedMaterials.Count; i++)
-            if (ownedMaterials[i] != null) Destroy(ownedMaterials[i]);
-        for (int i = 0; i < ownedTextures.Count; i++)
-            if (ownedTextures[i] != null) Destroy(ownedTextures[i]);
-        for (int i = 0; i < ownedMeshes.Count; i++)
-            if (ownedMeshes[i] != null) Destroy(ownedMeshes[i]);
+        initialized = false;
     }
 }
