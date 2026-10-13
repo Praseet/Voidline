@@ -16,7 +16,11 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     [SerializeField] private Material[] moonMaterials;
     [SerializeField] private Material[] starMaterials;
     [SerializeField] private Material[] ringMaterials;
-    [Header("Authored Celestial Prefabs (optional)")]
+    [Header("Baked Planet Surface Textures (optional)")]
+    [SerializeField] private Texture2D[] planetTextures;
+    [SerializeField] private Texture2D[] gasGiantTextures;
+    [SerializeField] private Texture2D[] moonTextures;
+    [Header("Authored Celestial Prefabs (optional)")
     [SerializeField] private GameObject[] planetPrefabs;
     [SerializeField] private GameObject[] gasGiantPrefabs;
     [SerializeField] private GameObject[] moonPrefabs;
@@ -29,6 +33,9 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     public Material PickMoonMaterial(int seed) => Pick(moonMaterials, seed);
     public Material PickStarMaterial(int seed) => Pick(starMaterials, seed);
     public Material PickRingMaterial(int seed) => Pick(ringMaterials, seed);
+    public Texture2D PickPlanetTexture(int seed) => Pick(planetTextures, seed);
+    public Texture2D PickGasGiantTexture(int seed) => Pick(gasGiantTextures, seed);
+    public Texture2D PickMoonTexture(int seed) => Pick(moonTextures, seed);
 
     public GameObject PickPlanetPrefab(int seed) => Pick(planetPrefabs, seed);
     public GameObject PickGasGiantPrefab(int seed) => Pick(gasGiantPrefabs, seed);
@@ -42,6 +49,9 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     public int MoonMaterialCount => Count(moonMaterials);
     public int StarMaterialCount => Count(starMaterials);
     public int RingMaterialCount => Count(ringMaterials);
+    public int PlanetTextureCount => Count(planetTextures);
+    public int GasGiantTextureCount => Count(gasGiantTextures);
+    public int MoonTextureCount => Count(moonTextures);
     public int PrefabCount => Count(planetPrefabs) + Count(gasGiantPrefabs) +
         Count(moonPrefabs) + Count(starPrefabs) + Count(ringPrefabs);
 
