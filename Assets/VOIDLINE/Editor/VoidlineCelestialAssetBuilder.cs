@@ -33,6 +33,28 @@ public static class VoidlineCelestialAssetBuilder
     private static int panoramaDownloadErrors;
     private static bool isDownloadingPanoramas;
 
+    private const string BlendMaterialPath = ResourceFolder + "/M_VOIDLINE_CelestialBlend.mat";
+
+    private static void EnsureBlendSkyboxMaterial()
+    {
+        Material material = AssetDatabase.LoadAssetAtPath<Material>(BlendMaterialPath);
+        if (material == null)
+        {
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(
+                "Assets/VOIDLINE/Shaders/VOIDLINE_CelestialBlendSkybox.shader");
+            if (shader == null) shader = Shader.Find("Skybox/VOIDLINE Celestial Blend");
+            if (shader == null)
+            {
+                Debug.LogWarning("[VOIDLINE] Celestial blend shader has not imported yet.");
+                return;
+            }
+            material = new Material(shader) { name = "M_VOIDLINE_CelestialBlend" };
+            AssetDatabase.CreateAsset(material, BlendMaterialPath);
+        }
+        EditorUtility.SetDirty(material);
+        AssetDatabase.SaveAssets();
+    }
+
     [MenuItem("VOIDLINE/Environment/Download Multicolour Space Panoramas (33 MB)")]
     public static void DownloadSpacePanoramas()
     {
@@ -47,6 +69,7 @@ public static class VoidlineCelestialAssetBuilder
         panoramaDownloadIndex = 0;
         panoramaDownloadErrors = 0;
         Directory.CreateDirectory(PanoramaFolder);
+        EnsureBlendSkyboxMaterial();
         EditorUtility.DisplayProgressBar("VOIDLINE Celestial Environment",
             "Preparing official multicolour nebula maps…", 0f);
         DownloadNextPanorama();
