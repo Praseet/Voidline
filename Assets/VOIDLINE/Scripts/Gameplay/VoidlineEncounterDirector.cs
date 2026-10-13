@@ -27,6 +27,7 @@ internal sealed class VoidlineEncounterDirector
         public int Count;
         public Hazard First;
         public Hazard Second;
+        public Hazard Third;
         public float DelayMultiplier;
         public float Pressure;
     }
@@ -36,7 +37,9 @@ internal sealed class VoidlineEncounterDirector
         Single = 0,
         OffsetPair = 1,
         CrossWeave = 2,
-        VerticalWeave = 3
+        VerticalWeave = 3,
+        FlankPair = 4,
+        Slalom = 5
     }
 
     private System.Random random;
@@ -54,7 +57,7 @@ internal sealed class VoidlineEncounterDirector
 
     public Plan Next(float elapsed, int passagesCleared, int hull,
         float spawnAheadDistance, float spawnXLimit, float spawnYLimit,
-        float spawnZBackJitter, float spawnZForwardJitter)
+        float spawnZBackJitter, float spawnZForwardJitter, float worldSpeed)
     {
         if (random == null)
             BeginRun(73129);
@@ -70,17 +73,25 @@ internal sealed class VoidlineEncounterDirector
             pattern = Pattern.Single;
             recoveryDue = false;
         }
-        else if (pressure >= 0.08f && index % 7 == 2)
+        else if (pressure >= 0.36f && passagesCleared >= 2 && index % 11 == 7)
+        {
+            pattern = Pattern.Slalom;
+        }
+        else if (pressure >= 0.08f && index % 9 == 2)
         {
             pattern = Pattern.OffsetPair;
         }
-        else if (pressure >= 0.16f && index % 7 == 4)
+        else if (pressure >= 0.14f && index % 9 == 4)
         {
             pattern = Pattern.CrossWeave;
         }
-        else if (pressure >= 0.32f && passagesCleared >= 3 && index % 7 == 6)
+        else if (pressure >= 0.24f && passagesCleared >= 3 && index % 9 == 6)
         {
             pattern = Pattern.VerticalWeave;
+        }
+        else if (pressure >= 0.30f && passagesCleared >= 1 && index % 9 == 8)
+        {
+            pattern = Pattern.FlankPair;
         }
 
         bool peak = pattern != Pattern.Single;
@@ -105,7 +116,23 @@ internal sealed class VoidlineEncounterDirector
             int safeIndex = random.Next(0, 3);
             safeLane = new Vector2(safeIndex == 0 ? -laneX : (safeIndex == 1 ? 0f : laneX), 0f);
         }
-        float spawnZ = spawnAheadDistance + NextFloat(-spawnZBackJitter, spawnZForwardJitter);
+        else if (pattern == Pattern.FlankPair)
+        {
+            // A wide, deliberately open centre lane makes this formation read as a choice,
+            // not a wall. Hazards arrive with a small depth stagger to preserve reaction time.
+            safeLane = Vector2.zero;
+        }
+        // Keep adjacent encounter planes ordered. Wide independent depth jitter can put a new
+        // formation in front of the second member of the previous pair, especially at boost.
+        // Lane and pattern variation carry most of the randomness; depth variation stays subtle.
+        float backJitter = Mathf.Min(spawnZBackJitter, 2.5f);
+        float forwardJitter = Mathf.Min(spawnZForwardJitter, 2.5f);
+        float spawnZ = spawnAheadDistance + NextFloat(-backJitter, forwardJitter);
+        // Pair depth is a reaction-time budget, not a fixed decorative spacing. At boost
+        // speed a 6 m gap gives barely a quarter-second to read the second obstacle.
+        // Keep a useful dodge window across the entire speed range without making pairs
+        // drift so far apart that they stop reading as one formation.
+        float pairStagger = Mathf.Clamp(worldSpeed * 0.84f, 12f, 21f);
         float radius = Mathf.Lerp(0.68f, 0.96f, Mathf.Clamp01(pressure + NextFloat(0f, 0.24f)));
 
         Vector2 firstLane = ChooseHazardLane(safeLane, Vector2.positiveInfinity,
@@ -114,20 +141,41 @@ internal sealed class VoidlineEncounterDirector
         Hazard first = new Hazard(new Vector3(firstLane.x, firstLane.y, firstZ), radius);
 
         Hazard second = default;
+        Hazard third = default;
         int count = 1;
         float delayMultiplier = recovery ? 1.2f : 1f;
         if (pattern != Pattern.Single)
         {
             float secondRadius = Mathf.Lerp(0.68f, 0.93f, Mathf.Clamp01(pressure + NextFloat(0f, 0.18f)));
             Vector2 secondLane = ChooseHazardLane(safeLane, firstLane, xLimit, yLimit, secondRadius);
-            float stagger = pattern == Pattern.OffsetPair ? 4.8f : NextFloat(6f, 9f);
+            float stagger = pattern == Pattern.OffsetPair ? pairStagger * 0.94f : pairStagger;
             second = new Hazard(new Vector3(secondLane.x, secondLane.y, spawnZ + stagger), secondRadius);
             count = 2;
             delayMultiplier = 1.08f;
             recoveryDue = peak;
         }
 
-        if (pattern == Pattern.VerticalWeave)
+        if (pattern == Pattern.Slalom)
+        {
+            // Three depth-separated decisions form an S-curve: left, right, then left.
+            // Each plane has one broad dodge side; depth grows with actual travel speed so
+            // boost remains demanding without collapsing the steering window.
+            // Put each boulder close enough to the centre line that holding still is unsafe;
+            // alternating sides then requires an actual lateral commitment, not a cosmetic weave.
+            float laneX = Mathf.Min(0.92f, xLimit * 0.42f);
+            float laneY = Mathf.Min(0.30f, yLimit * 0.16f);
+            float slalomStagger = Mathf.Clamp(worldSpeed * 1.03f, 13f, 25f);
+            first = new Hazard(new Vector3(-laneX, -laneY, firstZ), first.Radius);
+            second = new Hazard(new Vector3(laneX, laneY, spawnZ + slalomStagger), second.Radius);
+            third = new Hazard(new Vector3(-laneX, -laneY * 0.55f,
+                spawnZ + slalomStagger * 2f), Mathf.Max(0.62f, second.Radius * 0.96f));
+            count = 3;
+            delayMultiplier = 1.18f;
+            recoveryDue = true;
+            // Plan.SafeLane denotes the entry-side opening; the next two openings alternate.
+            safeLane = new Vector2(laneX + 0.32f, 0f);
+        }
+        else if (pattern == Pattern.VerticalWeave)
         {
             // A high/low pair stays opposite the protected centre-height lane.
             // The player can read the first obstacle before committing to the second.
@@ -139,9 +187,18 @@ internal sealed class VoidlineEncounterDirector
             first = new Hazard(new Vector3(x, top, firstZ), first.Radius);
             second = new Hazard(new Vector3(
                 Mathf.Clamp(x + NextFloat(-0.2f, 0.2f), -xLimit * 0.7f, xLimit * 0.7f),
-                -top, spawnZ + NextFloat(6f, 9f)), second.Radius);
+                -top, spawnZ + pairStagger), second.Radius);
             count = 2;
             delayMultiplier = 1.12f;
+        }
+        else if (pattern == Pattern.FlankPair)
+        {
+            float flankX = Mathf.Min(2.35f, xLimit * 0.96f);
+            float laneY = Mathf.Min(0.48f, yLimit * 0.28f);
+            first = new Hazard(new Vector3(-flankX, -laneY, firstZ), first.Radius);
+            second = new Hazard(new Vector3(flankX, laneY, spawnZ + pairStagger * 0.90f), second.Radius);
+            count = 2;
+            delayMultiplier = 1.10f;
         }
         else if (pattern == Pattern.CrossWeave)
         {
@@ -177,6 +234,7 @@ internal sealed class VoidlineEncounterDirector
             Count = count,
             First = first,
             Second = second,
+            Third = third,
             DelayMultiplier = delayMultiplier,
             Pressure = pressure
         };
@@ -197,16 +255,18 @@ internal sealed class VoidlineEncounterDirector
         float xLimit, float yLimit, float radius)
     {
         const int attempts = 18;
+        float safeLaneClearance = 1.05f + Mathf.Clamp(radius, 0.5f, 1.2f) * 0.14f;
+        float hazardClearance = 1.02f + Mathf.Clamp(radius, 0.5f, 1.2f) * 0.14f;
         for (int i = 0; i < attempts; i++)
         {
             Vector2 candidate = new Vector2(
                 NextFloat(-xLimit, xLimit),
                 NextFloat(-yLimit, yLimit));
 
-            if (!IsSafeClearance(candidate, safeLane, 1.18f))
+            if (!IsSafeClearance(candidate, safeLane, safeLaneClearance))
                 continue;
             if (otherHazard != Vector2.positiveInfinity &&
-                !IsSafeClearance(candidate, otherHazard, 1.15f))
+                !IsSafeClearance(candidate, otherHazard, hazardClearance))
                 continue;
             return candidate;
         }

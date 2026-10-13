@@ -1,27 +1,28 @@
 # VOIDLINE — QA Checklist
 
-Last automated/editor/build pass: 2026-10-12. Re-run after further gameplay changes.
+Last automated/editor/build pass: 2026-10-13 (source-level encounter fuzzing; live audio/propulsion checks remain open). Re-run after further gameplay changes.
 
-## 2026-10-12 — Space Threat soundtrack integrated
+## 2026-10-12 — Space Threat soundtrack integrated (original layered implementation; superseded 2026-10-13)
 
-- [x] Imported pack: `Assets/Space Threat (Action Cinematic Music)` — 6 WAV stems, all 44.1 kHz
+- [x] Imported pack: `Assets/Space Threat (Action Cinematic Music)` — 6 WAV files (three full alternate mixes and three looped versions), all 44.1 kHz
   stereo 16-bit. Durations: Slow Ambient 144.0s / looped 132.0s; Electronic Dramatic 88.6s / looped
   81.2s; Energetic Powerful 70.5s / looped 66.0s.
-- [x] The three **"Looped"** stems were copied (with their `.meta` files, preserving GUIDs and import
+- [x] The three **"Looped"** versions were copied (with their `.meta` files, preserving GUIDs and import
   settings) into `Assets/Resources` so `Resources.Load` can resolve them:
   `Space Threat  (Slow Ambient Version, Looped).wav`,
   `Space Threat (Electronic Dramatic Version, Looped).wav`,
   `Space Threat (Energetic Powerful Version, Looped).wav`.
   The three non-looped masters are deliberately not loaded.
-- [x] `VoidlineAdaptiveMusic` rewritten to play the real stems and drop the procedural synth entirely
+- [x] `VoidlineAdaptiveMusic` rewritten to play the real alternate versions and drop the procedural synth entirely
   (`CreateMusicStem` and `AudioClip.Create` confirmed absent from the source). Layer mapping:
   ambient=Slow Ambient, tension=Electronic Dramatic, boost=Energetic Powerful, critical=Electronic
   Dramatic (reused so the score stays coherent instead of adding an unrelated fourth track).
 - [x] Runtime readback in Play Mode: all four layers report the expected clip, `loop=True`,
   `spatialBlend=0` (2D bed), `isPlaying=True`. All three `Resources.Load` probes return
   `loadState=Loaded` at 44100 Hz, 2 channels.
-- [x] Mix response measured across scenarios (settled volumes): cruise 0.550 ambient / 0.150 tension;
+- [x] Original mix response measured across scenarios (settled volumes): cruise 0.550 ambient / 0.150 tension;
   boosting adds 0.447 boost; critical hull adds 0.402 tension and 0.519 critical; pause ducks the bed.
+  These readings describe the original layer mix, not the newer crossfade design.
 - [x] Game Over zeroes every layer target so the bed fades rather than cutting.
 - [x] Fixed a bug in this pass: `CreateSource` previously assigned `source.name`, which renames the
   **host GameObject** — the shared `GameManager` had been renamed to `Music_Critical`. Sources are now
@@ -237,3 +238,57 @@ Last automated/editor/build pass: 2026-10-12. Re-run after further gameplay chan
 - [ ] Still open: Unity Editor/Pipeline `recompile` and Editor main-thread commands timed out at 30 seconds. Need fresh compile/Console and Game View confirmation once the Editor service responds; do not call these latest changes compile-verified yet.
 - [ ] Still open: remove the inert no-op `VoidlineRouteBranchController` scene component using the Unity Editor API, then remove the compatibility shim. Do not hand-edit `main.unity` YAML unless the Editor API is proven unrecoverable and a backup/recovery path is agreed.
 - [ ] Still open: visually inspect the actual gameplay camera for the dark MoonBurst sky, verify the disliked smooth oval objects are gone after a fresh scene run, confirm the starter tunnel remains permanently retired, and test ambient/boost/critical music layer changes.
+
+
+## 2026-10-13 — Music-intensity memory and formation timing (source changes)
+
+- [x] Confirmed the Space Threat pack presents three different complete versions (Energetic Powerful 1:10, Electronic Dramatic 1:30, Slow Ambient 2:24), not three stems. Product reference: https://www.gamedevmarket.net/asset/space-threat-free-action-music.
+- [x] Reworked VoidlineAdaptiveMusic so boost intensity is remembered independently of boost fuel: 6.5-second hold plus an 8.5-second easing release. Near-miss flow, rolls and landmark crossings can refresh it.
+- [x] Energetic and dramatic arrangements are demand-started from their authored beginning, then fade out and stop. Ambient and energetic states crossfade rather than layering two complete mixes. Critical-hull audio uses the dramatic variant, not a duplicate second AudioSource of the same clip.
+- [ ] Still open: listen in a fresh live run. The energetic phrase must persist after boost fuel expires, return to cruise without a sudden dip, refresh correctly during a second boost/near-miss, and stay intelligible at critical hull.
+- [x] Changed pair depth to speed-scaled stagger and limited encounter-centre Z jitter to ±2.5 m.
+- [x] Formation pacing now budgeted from pair depth, worst-case centre-jitter delta, base cruise speed, a small margin and a short recovery beat, rather than the generic minimum spawn interval alone.
+- [x] Ran the actual VoidlineEncounterDirector source in an isolated seeded fuzz harness for 500,000 plans across 1,000 seeds, alternating cruise and boosted movement speeds. Zero safe-lane clearance violations, out-of-bounds hazards, peak/recovery violations, repeated peak patterns or invalid hazard counts. Pair member arrival gap was 0.75–1.0 seconds for tested speed inputs.
+- [ ] Still open: one Unity Play Mode observation must verify the next formation does not overtake the second member of an earlier pair and that recovery beats feel intentional. The isolated harness is not a physics/collision simulation.
+- [ ] Still open: Unity source compile and shader/material import after the latest changes; earlier import log reported a SourceDataChangedDuringImport rescan. No fresh compile error was observed in the last filtered log sample, but this is not a substitute for a clean current Console.
+
+
+
+
+
+
+## 2026-10-13 — Bounded impact response (Phase 5 source change)
+
+- [x] A survivable collision now applies a short, bounded displacement away from the impact source (0.42 world units over 0.22 seconds by default).
+- [x] Steering input remains active; the displacement uses the existing horizontal/vertical lane clamps and does not add a control lock or alter boost fuel.
+- [x] Lethal hits skip the nudge; control disable/reconfigure clears any pending displacement.
+- [ ] Still open: perform one controlled side hit and one upper/lower hit at middle lane and near each lane edge. Confirm visible displacement direction, clamp at edges, one hull loss per cooldown, immediate steering recovery, and no nudge after Game Over.
+
+## 2026-10-13 — Runtime camera effects survive script refresh
+
+- [x] VoidlineSpeedEffects now searches the existing camera child and uniquely named runtime Volume profile before constructing another velocity streak mesh or URP post-processing profile.
+- [x] The recovery path rebinds MeshFilter/MeshRenderer, falloff texture, MotionBlur, Vignette, ColorAdjustments, Bloom, ChromaticAberration and FilmGrain from the existing objects.
+- [x] If it finds a partial stale rig, it renames the generated objects before deferred destruction so an immediate second Configure call cannot rediscover them.
+- [ ] Still open: after the next successful compile, enter Play Mode twice and inspect that only one “VOIDLINE / Peripheral Velocity” child and one “VOIDLINE Runtime Speed Profile” Volume exist, and that boost blur/streak response still operates.
+
+## 2026-10-13 — Environment lifecycle and runtime allocations
+
+- [x] Replaced per-rock Destroy-on-cleanup with a reusable pool for distant backdrop asteroid scenery.
+- [x] Reset restores poolable scenery and discards sector monuments by role; a HashSet protects large sector cue objects from accidentally entering the ordinary asteroid pool.
+- [x] The pool caches each prefab instance's original local scale, uses deterministic route-relative placement/rotation, and makes the scenery non-interactive before reactivating a newly created instance.
+- [ ] Still open: run a sustained 30–60 second session and at least one restart. Watch for stale scale/position, duplicate instances, sector-monument reuse as rocks, visible pop-in, or collider activity. Source changes do not count as runtime acceptance.
+- [ ] Windows x64 build remains stale; do not release until Package Manager/build recovery, fresh BuildReport success, and a standalone gameplay run are completed.
+
+
+## 2026-10-13 — Cruise/boost exhaust silhouette, obstacle fairness and fatal-impact beat
+
+- [x] Changed plume membranes from a fixed 2.45× transverse scale to a continuous 0.90× cruise → 2.68× boost width envelope.
+- [x] Reduced sheet idle alpha from 0.76 to 0.42 and idle glow from 0.82 to 0.54, while slightly strengthening travelling deformation; boosted glow changes only 2.35→2.23 (about 5%), deliberately a small reduction.
+- [x] Sheet cache recovery now reacquires the original FBX mesh by child name before creating a fresh runtime dynamic mesh, rather than treating an already animated copy as its rest pose. Prior runtime mesh copies are retired on rebuild.
+- [ ] **Visual gate still open:** the most recent boost screenshot still reads as thin engine needles with membranes barely visible. The code changes are present, but the current capture did not demonstrate the intended silhouette improvement. Re-enter Play Mode after the current compile, inspect ribbon scale in the actual boosted frame, and adjust geometry/visibility only from that evidence.
+- [x] Near-miss clearance now scales with the actual pooled asteroid size; larger obstacles require wider clean clearance, while the reward still begins outside the existing normalized collision footprint.
+- [x] Added a directional final-collision animation: craft-only pitch/roll attitude loss, short camera hit, terminal nozzle discharge, slow environmental drift and result-overlay delay (1.12 s). Upright collision/control root is retained; player input shuts off immediately.
+- [x] Documented obstacle-avoidance research and applied design rules in Docs/RESEARCH_SPACE_FLIGHT_FEEL.md: reaction-time budgets, readable pattern grammar, safe-lane feasibility, near-miss incentives, generous fairness margins and layered death feedback.
+- [ ] **Gameplay acceptance still open:** trigger three controlled hits with damage cooldown respected, capture the 1.12-second final-hit beat, verify results appear afterward, and restart. Then test one size-small and one size-large near miss at matched normalized clearances.
+- [ ] **Current Editor is in Edit Mode** according to the last runtime snapshot (Application.isPlaying=False). The prior boost screenshot was genuinely captured in Play Mode; the latest scripts need a fresh Play Mode launch before current live-state checks.
+

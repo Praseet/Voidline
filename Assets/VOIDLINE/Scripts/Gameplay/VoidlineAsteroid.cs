@@ -38,7 +38,8 @@ public sealed class VoidlineAsteroid : MonoBehaviour
         if (!nearMissChecked && previousZ > -2.4f && currentZ <= -2.4f)
         {
             nearMissChecked = true;
-            if (gameManager != null) gameManager.RegisterNearMiss(transform.position);
+            if (gameManager != null) gameManager.RegisterNearMiss(transform.position,
+                Mathf.Max(transform.localScale.x, transform.localScale.z));
         }
         if (currentZ < -10f)
         {
@@ -57,7 +58,7 @@ public sealed class VoidlineAsteroid : MonoBehaviour
         if (gameManager != null)
         {
             if (controller.IsDodgeActive) gameManager.RegisterAsteroidDodged();
-            else gameManager.TakeDamage();
+            else gameManager.TakeDamage(transform.position);
         }
         ReturnToPool();
     }

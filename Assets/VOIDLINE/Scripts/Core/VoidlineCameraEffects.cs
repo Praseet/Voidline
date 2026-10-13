@@ -36,26 +36,41 @@ public sealed class VoidlineCameraEffects : MonoBehaviour
     private float impactPitchKick;
     private float impactRollKick;
     private float boostImpactElapsed = -1f;
+    private float fieldDeflectionElapsed = -1f;
+    private float fieldDeflectionDirection = 1f;
     private Vector2 steering;
     private Vector3 routeOffset;
     private Vector3 routeTangent = Vector3.forward;
 
     private void Awake()
     {
-        restingLocalPosition = transform.localPosition;
-        restingLocalRotation = transform.localRotation;
+        // Lower the chase eye slightly and lift its sightline a touch: keep the engine
+        // silhouette in view while showing more of the space ahead instead of looking down at it.
+        restingLocalPosition = transform.localPosition + new Vector3(0f, -0.12f, 0f);
+        restingLocalRotation = Quaternion.Euler(-1.25f, 0f, 0f) * transform.localRotation;
         targetCamera = GetComponent<Camera>();
         if (targetCamera == null) targetCamera = Camera.main;
         if (targetCamera != null)
         {
             // The ship should occupy enough of the chase view to make acceleration feel physical.
-            restingFieldOfView = Mathf.Min(targetCamera.fieldOfView, 54f);
+            restingFieldOfView = Mathf.Min(targetCamera.fieldOfView, 52f);
             targetCamera.fieldOfView = restingFieldOfView;
         }
     }
 
     public void AddTrauma(float amount) =>
         trauma = Mathf.Clamp01(trauma + Mathf.Max(0f, amount));
+
+    /// <summary>
+    /// An advanced shield/field deflection: brief directional parallax and a tiny lens swell,
+    /// not a heavy physical-crash recoil. The boost ignition response remains separate.
+    /// </summary>
+    public void TriggerFieldDeflection(float direction)
+    {
+        fieldDeflectionElapsed = 0f;
+        fieldDeflectionDirection = direction < 0f ? -1f : 1f;
+        AddTrauma(0.055f);
+    }
 
     /// <summary>
     /// NFS-style focus squeeze followed by a rapid lens release. This pulse is independent
@@ -68,6 +83,21 @@ public sealed class VoidlineCameraEffects : MonoBehaviour
         impactPitchKick = Mathf.Max(impactPitchKick, 7.5f);
         impactRollKick = Mathf.Max(impactRollKick, 2.0f);
         AddTrauma(0.72f);
+    }
+
+    /// <summary>
+    /// Fatal collision has a heavier, asymmetric kick than boost ignition: one short impact
+    /// pulse, a directional roll, and then a damped settle while the ship performs its final
+    /// attitude-loss animation. It does not keep shaking during the result screen.
+    /// </summary>
+    public void TriggerFinalImpact(float direction)
+    {
+        float side = direction < 0f ? -1f : 1f;
+        impactRecoil = Mathf.Max(impactRecoil, 1.08f);
+        impactPitchKick = Mathf.Max(impactPitchKick, 11.5f);
+        impactRollKick = side * Mathf.Max(Mathf.Abs(impactRollKick), 6.5f);
+        boostImpactElapsed = 0f;
+        AddTrauma(0.82f);
     }
 
     public void SetFlightResponse(float boost, Vector2 steeringInput)
@@ -137,8 +167,20 @@ public sealed class VoidlineCameraEffects : MonoBehaviour
             Mathf.Sin(rumbleClock * 43f) * boostRumble * 0.45f,
             Mathf.Sin(rumbleClock * 23f) * boostRumble * 0.18f) * speedWeight;
         Vector3 boostDolly = Vector3.forward * (boostDollyIn * boostBlend);
+        float fieldDeflection = 0f;
+        if (fieldDeflectionElapsed >= 0f)
+        {
+            fieldDeflectionElapsed += dt;
+            float progress = Mathf.Clamp01(fieldDeflectionElapsed / 0.28f);
+            fieldDeflection = Mathf.Sin(progress * Mathf.PI) * (1f - 0.18f * progress);
+            if (progress >= 1f) fieldDeflectionElapsed = -1f;
+        }
+        Vector3 deflectionNudge = new Vector3(
+            fieldDeflectionDirection * 0.028f * fieldDeflection,
+            0.012f * fieldDeflection,
+            0f);
         transform.localPosition = restingLocalPosition + routeOffset + steeringNudge
-            + shake + recoil + boostDolly + speedRumble;
+            + shake + recoil + boostDolly + speedRumble + deflectionNudge;
 
         float routeYaw = Mathf.Atan2(routeTangent.x, Mathf.Max(0.001f, routeTangent.z)) * Mathf.Rad2Deg;
         float routePitch = Mathf.Atan2(routeTangent.y,
@@ -150,14 +192,18 @@ public sealed class VoidlineCameraEffects : MonoBehaviour
         Quaternion lean = Quaternion.Euler(-steering.y * 0.65f, steering.x * 0.45f,
             -steering.x * cameraBankDegrees);
         Quaternion impactRotation = Quaternion.Euler(impactPitchKick, 0f, impactRollKick);
-        Quaternion targetRotation = restingLocalRotation * routeAim * lean * impactRotation;
+        Quaternion fieldRotation = Quaternion.Euler(0f,
+            -fieldDeflectionDirection * 0.7f * fieldDeflection,
+            fieldDeflectionDirection * 0.45f * fieldDeflection);
+        Quaternion targetRotation = restingLocalRotation * routeAim * lean * impactRotation * fieldRotation;
         float rotationBlend = 1f - Mathf.Exp(-steeringResponse * dt);
         transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, rotationBlend);
 
         if (targetCamera != null)
         {
             float impactKick = EvaluateImpactFovKick(dt);
-            float targetFov = restingFieldOfView + boostFovIncrease * boostBlend + impactKick;
+            float targetFov = restingFieldOfView + boostFovIncrease * boostBlend + impactKick
+                + 1.8f * fieldDeflection;
             targetFov = Mathf.Clamp(targetFov, 42f, 92f);
             float response = boostImpactElapsed >= 0f && boostImpactElapsed < 0.24f
                 ? 28f

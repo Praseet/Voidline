@@ -3,7 +3,7 @@
 **Updated:** 2026-10-13  
 **Canonical plan:** this file  
 **Engine:** Unity 6 / URP / Windows x64  
-**Current focus:** Phase 3 — deep-space composition, longer object approach, and score/structure-driven sector transitions. Keep encounter and collision tuning in step with the environment; creature work follows after sector readability is established.
+**Current focus:** Close the Phase 3 environment lifecycle pass, finish Phase 4's speed-aware encounter spacing, and begin Phase 5 impact/recovery feedback. The Clinger remains sequenced after a real run proves encounter readability and reset reliability; then finish audio/accessibility and release work.
 
 ## North star
 
@@ -67,16 +67,18 @@ VOIDLINE is a fast, cinematic 2.5D survival-flight game: steer a fragile courier
 - Adapt pressure to elapsed time, current hull and recent damage; create recovery beats after peaks.
 **Gate:** the run gets harder through decisions/combination, not sheer object spam.
 
-### Phase 5 — Collision and traversal feel
-- Verify collision cooldowns, hull loss, near-miss exclusion, directional response and pooling/reset ownership.
-- Tune speed loss, brief VFX/audio/camera cues and recovery windows with controlled hits/passes/pickups.
-**Gate:** each event fires exactly once; players retain control after a glancing hit; pools and restart reset cleanly.
+### Phase 5 — Collision and traversal feel (substantial source pass; live gate open)
+- Surviving hits now apply a bounded 0.42-unit deflection over 0.22 s while steering remains live and the lane clamps remain authoritative. Near-miss clearances are radius-aware instead of using one fixed footprint for every asteroid.
+- Fatal contact now plays a 1.12-second attitude-loss beat on the ship model only: camera recoil, a short dual-nozzle discharge, asymmetric pitch/roll, slow environmental parallax, then the results panel. The collision root stays upright and input stops immediately.
+- **Gate open:** verify one hull per cooldown, damage direction, close-pass band for small and large rocks, final-impact camera capture, results timing, and clean restart reset in a fresh Play Mode run.
+**Gate:** each event fires exactly once; players retain control after a glancing hit; final hit has a readable ending; pools and restart reset cleanly.
 
-### Phase 6 — Creature: Clinger and scrape-off
-- Add a distant Witness cue only after the basic space/landmark composition works.
-- Prototype a Clinger attached to a ship anchor with bounded drag/roll bias, clear telegraphing and a visible removal goal.
-- Use an existing forgiving asteroid/scrape gap to remove it in stages; a miss should not cause an unavoidable death chain.
-**Gate:** attachment, scrape-off, death, pause, pooling and restart all work; no essential HUD/hazard cues are obscured.
+### Phase 6 — Creature: Clinger and scrape-off (prototype scaffold implemented; gameplay gate open)
+- The bespoke low-poly Clinger is generated from `Docs/Tools/create_voidline_clinger.py`, editable in `Assets/VOIDLINE/Art/Blender/VOIDLINE_Clinger_Industrial.blend`, exported to `Assets/VOIDLINE/Art/Generated/VOIDLINE_Clinger_Industrial.fbx`, and wrapped by `Assets/VOIDLINE/Resources/PF_VOIDLINE_Clinger_Industrial.prefab`.
+- `VoidlineClingerEncounter` now telegraphs after the second physical landmark crossing, attaches to the courier's right exhaust socket, grants an 8-second grace window, then reduces handling to 78% and raises boost drain to 135% of normal.
+- Two real safe near-misses while inside the roll-dodge window remove it, restore normal handling/boost economy and reward 150 points plus 18% boost. The ordinary near-miss flow reward remains unchanged; invalid proximity or a non-roll pass does not count. A failed scrape never adds damage.
+- The encounter is run-owned and stops on game-over; its timers freeze during pause. The prefab's colliders/rigidbodies are disabled and its six custom materials use URP/Lit.
+- **Gate still open:** no clean live Play Mode acceptance has been captured yet. Verify model scale/placement at the right engine, readable warning text, grace/penalty timing, two-roll scrape-off, no damage on missed attempts, pause/resume, game-over and restart. Do not count the Clinger phase as complete until those checks pass.
 
 ### Phase 7 — Camera, art, audio and accessibility polish
 - Compose camera anticipation, speed response, landmark framing and brief bounded impact feedback.
@@ -97,11 +99,6 @@ VOIDLINE is a fast, cinematic 2.5D survival-flight game: steer a fragile courier
 - The local development tree uses the SpaceSkies Free Purple cubemap through M_VOIDLINE_DarkSpace (kept local-only); a clean checkout falls back to a procedural dark panorama. The active main scene does not directly reference the excluded licensed asset.
 - The authored Blender courier (`Resources/VOIDLINE_Courier.fbx`, 10,084 tris) is the player ship and is confirmed rendering in Play Mode at scale 0.42. It previously never appeared because a serialized Kenney placeholder short-circuited the build path; see `Docs/QA_CHECKLIST.md` for the fix and the measured evidence. Bespoke creature encounters remain pending.
 - The smooth black oval cue objects were generated by the experimental branch controller; that controller has been replaced by a no-op compatibility shim pending Editor API removal of its serialized component. Its visual-generation code is no longer present.
-- The soundtrack is the imported **Space Threat (Free Action Music)** pack. `VoidlineAdaptiveMusic`
-  crossfades three authored "Looped" stems from `Assets/Resources`: Slow Ambient (132s) as the cruise
-  bed, Electronic Dramatic (81.2s) for tension and the critical-hull layer, and Energetic Powerful
-  (66s) for boost. The looped variants are used for their authored loop points; the non-looped masters
-  are intentionally not loaded. Verified in Play Mode: all three load at 44.1 kHz stereo, loop, play 2D,
-  and respond to boost/hull/pause/game-over. The earlier procedural four-layer synth has been removed.
+- The soundtrack is the imported **Space Threat (Free Action Music)** pack. It contains three complete alternate versions—not isolated stems—loaded from `Assets/Resources`: Slow Ambient (132s), Electronic Dramatic (81.2s), and Energetic Powerful (66s). `VoidlineAdaptiveMusic` uses the ambient version as cruise, crossfades to energetic via remembered boost/flow intensity, and switches to dramatic at critical hull; the energetic track now starts from its authored cue and holds after boost fuel ends. The looped versions are used; non-looped masters are not loaded. A previous Play Mode run verified all three `Resources.Load` probes at 44.1 kHz stereo; the latest crossfade/tail redesign is source-changed and awaiting live listening verification.
 - Unity CLI previously connected to the correct Editor but then recompile, run_script and Editor main-thread queries timed out at 30 seconds. Until a fresh compile/Play Mode probe succeeds, current source edits remain unverified. The existing Windows player executable is stale and not release-verified.
 - Do not delete user project modifications or reset the repository. Check git status before destructive work, and do not commit/push unless requested.

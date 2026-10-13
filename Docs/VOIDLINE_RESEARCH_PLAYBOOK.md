@@ -243,3 +243,55 @@ VOIDLINE should feel fast because the world has scale, close objects move past w
 - The route itself is continuous and seeded now; the existing 3 corridor meshes still repeat the same architectural module. Next production stage must author real distinct modules and route sockets rather than call the route spine a finished procedural level system.
 - Camera baseline clarified: the currently active main scene serializes FOV=65 and runtime reads 65.0. The earlier FOV?76 read came from SampleScene while it was the active scene. No camera override bug has been demonstrated; tune boost response from the actual main scene only.
 - Current Windows x64 build is still the previous build. A previous build attempt failed before compiling because Unity Package Manager could not start/connect over local IPC. Do not call the updated game build-verified until Package Manager recovery, fresh BuildReport success and standalone launch are observed.
+
+
+## 2026-10-13 — Adaptive music as remembered intensity, not boost duration
+
+### Asset and design finding
+
+The installed *Space Threat (Free Action Music)* pack contains **three complete alternate versions** (Energetic Powerful, Electronic Dramatic, Slow Ambient), not three isolated instrumental stems. The asset listing and author preview describe them as “3 different versions”: https://www.gamedevmarket.net/asset/space-threat-free-action-music. Treat them as competing musical states and crossfade deliberately; do not hold two complete arrangements at full volume and call them layers.
+
+### Implemented source design
+
+- The live boost resource remains governed by VoidlineGameManager exactly as before; the player does not get longer fuel.
+- VoidlineAdaptiveMusic now keeps an independent carriedBoostIntensity and boostMusicHoldRemaining. Boost ignition opens a 6.5-second phrase hold; after the hold expires the musical intensity eases away over 8.5 seconds. These are initial tuning values, not final playtest values.
+- Near-miss flow, successful rolls and gate/arch crossings can raise or refresh the musical intensity, so skilled play maintains momentum. This is event-driven and does not change boost energy, world-speed rules, or boost depletion.
+- The energetic version now starts from its authored opening cue when an inactive energetic phrase is requested, and it stops after the phrase and fade finish. This avoids revealing a random loop phase on every boost.
+- Ambient, energetic and critical-hull dramatic states use a crossfade based on remembered intensity/hull state. The opening theme remains the lead until its authored arrangement ends; a boost can duck it without cutting the boost response off at fuel depletion.
+- Pausing ducks the mix but freezes the phrase-hold clock, so reading the pause screen does not consume a musical phrase. Game Over fades the whole score intentionally.
+
+### Research behind the choice
+
+- FMOD’s parameter system lets game code expose continuously varying state values to events, automation and snapshots. VOIDLINE uses the same design pattern internally without adding a middleware dependency: https://www.fmod.com/docs/tutorials/parameters.html.
+- Wwise’s interactive music docs distinguish state/switch transitions from stingers, and describe transition segments / cue-driven exits. That supports transitioning between complete musical arrangements rather than treating alternate versions as stems: https://www.audiokinetic.com/en/public-library/2024.1.8_8893/?id=creating_interactive_music&source=Help and https://www.audiokinetic.com/en/library/2024.1.0_8669/?id=interactive_music_objects_common_properties&source=Help.
+- Unity’s Audio Mixer supports interpolated snapshots and mix weights, and explicitly supports ducking/alternate mix views; the current per-source implementation reproduces a lightweight state crossfade, but an AudioMixer asset is a future authoring-friendly option if more beds are added: https://docs.unity.com/en-us/engine/6000.3/manual/audio/mixer/mixer and https://docs.unity.cn/6000.1/Documentation/ScriptReference/Audio.AudioMixer.TransitionToSnapshots.html.
+- Adaptive intensity should not simply add an arbitrary layer every time intensity rises; the classic Game Developer adaptive-audio article discusses why linear layer stacking can be musically ineffective and why rhythmic/arrangement boundaries matter: https://media.gdcvault.com/GD_Mag_Archives/GDM_October_2002.pdf.
+
+### Tuning checklist
+
+Listen for the energetic arrangement after a short boost, after a boost followed by a near miss, after successive gate/arch rewards, at low hull, on pause/resume and at Game Over. Confirm the tail can be heard without making the cruise mix muddy; confirm a second boost during the tail refreshes the state instead of restarting the clip; confirm one isolated roll does not leave an overly intense soundtrack behind. Check on speakers and headphones and retain an audio peak/headroom margin. Current source is changed; these listening acceptance checks still require a running build.
+
+## 2026-10-13 — High-speed encounter timing and formation spacing
+
+### Problem identified
+
+The previous director spaced members of a two-hazard formation by only 4.2–9 m. At cruise (12 m/s), that offered about 0.35–0.75 seconds; at boosted speed (up to about 25.2 m/s), it could fall to roughly 0.17–0.36 seconds. Meanwhile, a new formation could be scheduled near the minimum 0.7-second spawn interval, before the second hazard of a boosted pair reached the player. Wide independent spawn-Z jitter could also reorder formation planes. This is a pacing/readability problem, not a particle or HUD problem.
+
+### Implemented source changes
+
+- Pair depth now scales with world speed and is clamped: pairStagger = Clamp(worldSpeed × 0.84, 12, 21). Offset and flank pairs keep small pattern-specific adjustments. The resulting isolated member-to-member arrival windows are approximately 0.75–1.0 seconds over the normal/boost speed samples.
+- Random depth offsets are capped at ±2.5 m. Lateral/vertical lanes and pattern choice retain variation; independent depth jitter no longer routinely leapfrogs formations.
+- For pairs, VoidlineGameManager.SpawnAsteroid now derives a conservative minimum interval from the second member's full depth, the worst pair of centre-jitter offsets, a safety margin and a 0.20-second recovery beat. It divides this by the current difficulty-adjusted nominal spawn interval to preserve the existing cadence calculation. This remains conservative if boost is released and speed falls back toward cruise while the pair is still approaching.
+- Recovery singles, low-hull protection, seeded pattern rotation and safe-lane selection remain intact. No new hazards or combat systems were added to solve the problem.
+
+### Current evidence and remaining gate
+
+A standalone source-level fuzz harness ran **500,000 seeded encounter plans** (1,000 seeds × 500 plans, sampling cruise and boosted speeds). It reported zero out-of-bounds positions, zero safe-lane-clearance violations, zero consecutive-peak/recovery violations, zero repeated peaks, and no malformed hazard counts. With the updated director it measured pair separations of 10.8–21 m and member arrival windows of 0.75–1.0 s for the sampled speed cases.
+
+This is a test of the real director logic compiled into a small isolated harness, not a Unity collision simulation. The manager's newly added spacing formula still needs one controlled live run checking that the second member has passed before the next formation enters the immediate flight window. Do not treat the standalone Windows build as verified until Package Manager/build recovery is resolved and the player is rebuilt separately.
+
+### References kept actionable
+
+- Game Developer's feedback / game-feel guidance: pair motion, sound, score and camera response to a single gameplay event rather than adding effects without a clear consequence: https://www.gamedeveloper.com/design/the-single-most-useful-advice-i-can-give-for-making-any-game-better-feedback and https://www.gamedeveloper.com/design/game-feel-the-secret-ingredient.
+- Thumper analysis emphasizes speed cues that complement rather than obscure gameplay: https://www.gamedeveloper.com/design/how-i-thumper-i-uses-striking-visuals-to-complement-gameplay-at-every-turn.
+- Unity's current URP advice is to profile render/GPU cost before broad optimizations; motion blur, post-processing, transparent overdraw and shader cost should be judged in the actual camera view, not inferred from script complexity: https://docs.unity.com/en-us/engine/6000.6/manual/analysis/graphics-performance-profiling/in-urp/understand-performance.

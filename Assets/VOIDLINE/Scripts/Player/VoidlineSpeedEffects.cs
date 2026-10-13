@@ -12,7 +12,7 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
 {
     [Header("Velocity Lens")]
     [SerializeField, Range(0f, 0.9f)] private float cruiseStreakOpacity = 0f;
-    [SerializeField, Range(0f, 0.9f)] private float boostStreakOpacity = 0.65f;
+    [SerializeField, Range(0f, 0.9f)] private float boostStreakOpacity = 0.74f;
     [SerializeField, Range(0f, 1f)] private float boostBlurIntensity = 0.38f;
     [SerializeField, Min(0.1f)] private float effectResponse = 7f;
     [SerializeField, Min(0.1f)] private float burstDuration = 0.72f;
@@ -31,6 +31,7 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
     private ColorAdjustments speedGrade;
     private Bloom speedBloom;
     private ChromaticAberration boostChromatic;
+    private FilmGrain speedGrain;
     private float boostBlend;
     private float burstRemaining;
     private float burstStrength;
@@ -45,13 +46,110 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
 
     private void Awake() => EnsureEffects();
 
+    private bool TryRecoverExistingEffects()
+    {
+        if (targetCamera == null) return false;
+
+        Transform existingRoot = transform.Find("VOIDLINE / Peripheral Velocity");
+        if (existingRoot != null)
+        {
+            streakRoot = existingRoot;
+            MeshFilter meshFilter = existingRoot.GetComponent<MeshFilter>();
+            MeshRenderer meshRenderer = existingRoot.GetComponent<MeshRenderer>();
+            streakMesh = meshFilter != null ? meshFilter.sharedMesh : null;
+            streakMaterial = meshRenderer != null ? meshRenderer.sharedMaterial : null;
+            if (streakMaterial != null && streakMaterial.HasProperty("_BaseMap"))
+                streakFalloffTexture = streakMaterial.GetTexture("_BaseMap") as Texture2D;
+        }
+
+        Volume[] volumes = targetCamera.GetComponents<Volume>();
+        for (int i = 0; i < volumes.Length; i++)
+        {
+            Volume candidate = volumes[i];
+            if (candidate == null || candidate.sharedProfile == null) continue;
+            if (candidate.sharedProfile.name != "VOIDLINE Runtime Speed Profile") continue;
+            motionVolume = candidate;
+            runtimeProfile = candidate.sharedProfile;
+            break;
+        }
+
+        if (runtimeProfile != null)
+        {
+            runtimeProfile.TryGet(out motionBlur);
+            runtimeProfile.TryGet(out speedVignette);
+            runtimeProfile.TryGet(out speedGrade);
+            runtimeProfile.TryGet(out speedBloom);
+            runtimeProfile.TryGet(out boostChromatic);
+            runtimeProfile.TryGet(out speedGrain);
+        }
+
+        bool complete = streakRoot != null && streakMesh != null && streakMaterial != null
+            && motionVolume != null && runtimeProfile != null
+            && motionBlur != null && speedVignette != null && speedGrade != null
+            && speedBloom != null && boostChromatic != null && speedGrain != null;
+
+        if (complete)
+        {
+            UniversalAdditionalCameraData cameraData =
+                targetCamera.GetComponent<UniversalAdditionalCameraData>();
+            if (cameraData == null)
+                cameraData = targetCamera.gameObject.AddComponent<UniversalAdditionalCameraData>();
+            cameraData.renderPostProcessing = true;
+            SetLensScale(targetCamera.fieldOfView);
+            SetMaterialAlpha(streakMaterial, presentedStreakOpacity);
+            return true;
+        }
+
+        // A partial stale runtime rig is worse than rebuilding: remove only the uniquely
+        // named generated objects/components before falling through to the normal constructor.
+        if (existingRoot != null)
+        {
+            // Rename before deferred Destroy so an immediate second Configure() cannot
+            // rediscover the stale object while Unity waits until end-of-frame to delete it.
+            existingRoot.gameObject.name = "VOIDLINE / Peripheral Velocity [stale]";
+            if (Application.isPlaying) Destroy(existingRoot.gameObject);
+            else DestroyImmediate(existingRoot.gameObject);
+        }
+        if (motionVolume != null)
+        {
+            Volume staleVolume = motionVolume;
+            VolumeProfile staleProfile = runtimeProfile;
+            if (staleProfile != null)
+                staleProfile.name = "VOIDLINE Runtime Speed Profile [stale]";
+            if (Application.isPlaying) Destroy(staleVolume);
+            else DestroyImmediate(staleVolume);
+            if (staleProfile != null)
+            {
+                if (Application.isPlaying) Destroy(staleProfile);
+                else DestroyImmediate(staleProfile);
+            }
+        }
+
+        streakRoot = null;
+        streakMesh = null;
+        streakFalloffTexture = null;
+        streakMaterial = null;
+        motionVolume = null;
+        runtimeProfile = null;
+        motionBlur = null;
+        speedVignette = null;
+        speedGrade = null;
+        speedBloom = null;
+        boostChromatic = null;
+        speedGrain = null;
+        return false;
+    }
+
     private void EnsureEffects()
     {
-        if (streakRoot != null) return;
-
         targetCamera = GetComponent<Camera>();
         if (targetCamera == null) targetCamera = Camera.main;
         if (targetCamera == null) return;
+
+        // Private runtime references can be cleared by script/domain reload while generated
+        // children and the Volume remain on the camera. Rebind them first instead of stacking
+        // another set of meshes and full-screen URP effects.
+        if (TryRecoverExistingEffects()) return;
         referenceFov = 58f;
 
         // The streak mesh lives a few units in front of the lens, outside a large clear centre.
@@ -116,9 +214,11 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
         speedGrade.contrast.overrideState = true;
         speedGrade.postExposure.overrideState = true;
         speedGrade.colorFilter.overrideState = true;
-        speedGrade.saturation.value = 0f;
-        speedGrade.contrast.value = 0f;
-        speedGrade.postExposure.value = 0f;
+        // A modest neon-retro grade lifts the nebula colour without flattening the dark void.
+        // Boost then trades saturation for contrast and bloom, preserving a sharp ship silhouette.
+        speedGrade.saturation.value = 9f;
+        speedGrade.contrast.value = 5f;
+        speedGrade.postExposure.value = 0.16f;
         speedGrade.colorFilter.value = Color.white;
 
         // Bloom belongs on the engines and a few star highlights—not as a cyan wash.
@@ -126,9 +226,13 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
         speedBloom.intensity.overrideState = true;
         speedBloom.threshold.overrideState = true;
         speedBloom.scatter.overrideState = true;
-        speedBloom.intensity.value = 0f;
+        speedBloom.intensity.value = 0.22f;
         speedBloom.threshold.value = 1.1f;
         speedBloom.scatter.value = 0.64f;
+
+        speedGrain = runtimeProfile.Add<FilmGrain>(true);
+        speedGrain.intensity.overrideState = true;
+        speedGrain.intensity.value = 0.025f;
 
         boostChromatic = runtimeProfile.Add<ChromaticAberration>(true);
         boostChromatic.intensity.overrideState = true;
@@ -179,16 +283,18 @@ public sealed class VoidlineSpeedEffects : MonoBehaviour
             speedVignette.intensity.value = Mathf.Lerp(0.05f, 0.28f, speedPresentation);
         if (speedGrade != null)
         {
-            speedGrade.saturation.value = Mathf.Lerp(0f, -12f, speedPresentation);
-            speedGrade.contrast.value = Mathf.Lerp(0f, 13f, speedPresentation);
-            speedGrade.postExposure.value = Mathf.Lerp(0f, 0.04f, speedPresentation);
+            speedGrade.saturation.value = Mathf.Lerp(9f, -8f, speedPresentation);
+            speedGrade.contrast.value = Mathf.Lerp(5f, 14f, speedPresentation);
+            speedGrade.postExposure.value = Mathf.Lerp(0.16f, 0.22f, speedPresentation);
         }
         if (speedBloom != null)
-            speedBloom.intensity.value = Mathf.Lerp(0f, 0.9f, speedPresentation);
+            speedBloom.intensity.value = Mathf.Lerp(0.22f, 0.60f, speedPresentation);
+        if (speedGrain != null)
+            speedGrain.intensity.value = Mathf.Lerp(0.025f, 0.055f, speedPresentation);
         if (boostChromatic != null)
         {
             float burstWeight = burstRemaining > 0f ? burstStrength : 0f;
-            boostChromatic.intensity.value = Mathf.Lerp(0f, 0.028f, smoothBoost) + 0.10f * burstWeight;
+            boostChromatic.intensity.value = Mathf.Lerp(0f, 0.028f, smoothBoost) + 0.06f * burstWeight;
         }
 
         if (motionBlur != null)

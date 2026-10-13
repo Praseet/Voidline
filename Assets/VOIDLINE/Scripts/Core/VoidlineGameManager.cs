@@ -62,6 +62,8 @@ public sealed class VoidlineGameManager : MonoBehaviour
     private int bestScore;
     private VoidlineAudioFeedback audioFeedback;
     private VoidlineAdaptiveMusic adaptiveMusic;
+    private VoidlineClingerEncounter clingerEncounter;
+    private float clingerBoostDrainMultiplier = 1f;
     private VoidlineCameraEffects cameraEffects;
     private GameObject gameOverPanel;
     private Button restartButton;
@@ -91,6 +93,7 @@ public sealed class VoidlineGameManager : MonoBehaviour
     private float pickupInterval = 16f;
     private int repairScoreBonus = 100;
     private readonly System.Collections.Generic.Stack<VoidlineAsteroid> asteroidPool = new System.Collections.Generic.Stack<VoidlineAsteroid>();
+    private GameObject[] fallbackAsteroidModels;
 
     private int hull;
     private float elapsed;
@@ -113,12 +116,14 @@ public sealed class VoidlineGameManager : MonoBehaviour
     private int nearMisses;
     private int flowChain;
     private float flowChainExpiresAt;
+    private Coroutine fatalImpactRoutine;
 
     public bool IsGameOver => gameOver;
     public bool IsPaused => paused;
     public float WorldSpeed => worldSpeed;
     public float BoostBlend => boostBlend;
     public float BoostEnergy => boostEnergy;
+    public float ClingerBoostDrainMultiplier => clingerBoostDrainMultiplier;
 
     private void ApplyRunSettings()
     {
@@ -216,6 +221,9 @@ public sealed class VoidlineGameManager : MonoBehaviour
         flightEffects = player.GetComponent<VoidlineFlightEffects>();
         if (flightEffects == null) flightEffects = player.gameObject.AddComponent<VoidlineFlightEffects>();
         flightEffects.Configure(playerController, this);
+        clingerEncounter = GetComponent<VoidlineClingerEncounter>();
+        if (clingerEncounter == null) clingerEncounter = gameObject.AddComponent<VoidlineClingerEncounter>();
+        clingerEncounter.Configure(this, player, playerController);
         EnsureHud();
         nextSpawnAt = Time.time + 1.0f;
         nextPickupAt = Time.time + 4.5f;
@@ -248,6 +256,9 @@ public sealed class VoidlineGameManager : MonoBehaviour
 
         boostHeld = true;
         if (audioFeedback != null) audioFeedback.PlayBoostStart();
+        // Musical intensity has its own hold/decay envelope; the soundtrack can finish its
+        // energetic phrase even when boost fuel has run out, without extending the actual boost.
+        if (adaptiveMusic != null) adaptiveMusic.NotifyBoostStarted();
         TriggerBoostImpact();
     }
 
@@ -304,11 +315,52 @@ public sealed class VoidlineGameManager : MonoBehaviour
         Time.timeScale = paused ? 0f : 1f;
     }
 
+    public void SetClingerBoostDrainMultiplier(float multiplier)
+    {
+        clingerBoostDrainMultiplier = Mathf.Clamp(multiplier, 1f, 2f);
+    }
+
+    public void NotifyClingerWarning()
+    {
+        if (gameOver || paused) return;
+        ShowMilestoneMessage("BIOMECHANICAL SIGNATURE  //  SHIP INTERCEPT", 2.2f);
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(0.36f, 2.5f);
+    }
+
+    public void NotifyClingerAttached()
+    {
+        if (gameOver || paused) return;
+        ShowMilestoneMessage("CLINGER ATTACHED  //  ROLL THROUGH A CLOSE PASS TO SHED IT", 3.0f);
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(0.48f, 3.6f);
+        if (cameraEffects != null) cameraEffects.AddTrauma(0.045f);
+    }
+
+    public void NotifyClingerScrapeProgress(int progress, int required)
+    {
+        if (gameOver || paused) return;
+        ShowMilestoneMessage("CLINGER SHEAR  //  " + progress + "/" + required +
+            "  //  KEEP THE ROLL DODGES CLEAN", 2.1f);
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(0.54f, 2.4f);
+    }
+
+    public void RegisterClingerFreed(float boostReward)
+    {
+        if (gameOver) return;
+        clingerBoostDrainMultiplier = 1f;
+        bonusPoints += 150;
+        boostEnergy = Mathf.Clamp01(boostEnergy + Mathf.Clamp(boostReward, 0f, 0.35f));
+        if (audioFeedback != null) audioFeedback.PlayPickup();
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(0.78f, 5.2f);
+        if (cameraEffects != null) cameraEffects.AddTrauma(0.08f);
+        ShowMilestoneMessage("CLINGER SHED  //  +150  //  BOOST RECOVERED", 2.6f);
+        RefreshHud();
+    }
+
     private void UpdateBoostState(float dt)
     {
         if (boostHeld)
         {
-            boostEnergy = Mathf.Max(0f, boostEnergy - boostDrainPerSecond * dt);
+            boostEnergy = Mathf.Max(0f, boostEnergy - boostDrainPerSecond * clingerBoostDrainMultiplier * dt);
             if (boostEnergy <= 0f)
             {
                 boostHeld = false;
@@ -365,6 +417,7 @@ public sealed class VoidlineGameManager : MonoBehaviour
     {
         if (gameOver || paused) return;
         if (audioFeedback != null) audioFeedback.PlayRoll();
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(0.38f, 1.8f);
         if (cameraEffects != null) cameraEffects.AddTrauma(0.065f);
     }
 
@@ -376,6 +429,8 @@ public sealed class VoidlineGameManager : MonoBehaviour
         int reward = 50 + Mathf.Min(chain - 1, 5) * 10;
         bonusPoints += reward;
         if (audioFeedback != null) audioFeedback.PlayPass();
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(
+            Mathf.Min(0.62f, 0.40f + chain * 0.04f), 2.7f + Mathf.Min(chain, 5) * 0.35f);
         if (cameraEffects != null) cameraEffects.AddTrauma(0.035f);
         ShowMilestoneMessage("ROLL DODGE  //  FLOW x" + chain + "  //  +" + reward, 1.2f);
         RefreshHud();
@@ -854,7 +909,8 @@ public sealed class VoidlineGameManager : MonoBehaviour
         flashRect.offsetMin = Vector2.zero;
         flashRect.offsetMax = Vector2.zero;
         damageFlashImage = flashObject.GetComponent<Image>();
-        damageFlashImage.color = new Color(0.95f, 0.035f, 0.09f, 0f);
+        // Shield-field disruption reads as a cyan spectral shear, not a red crash overlay.
+        damageFlashImage.color = new Color(0.12f, 0.82f, 1f, 0f);
         damageFlashImage.raycastTarget = false;
 
         controlsText = CreateText(hudCanvas.transform, "Controls Hint", font, 18,
@@ -975,15 +1031,63 @@ public sealed class VoidlineGameManager : MonoBehaviour
 
         VoidlineEncounterDirector.Plan plan = encounterDirector.Next(
             elapsed, passagesCleared, hull, spawnAheadDistance,
-            spawnXLimit, spawnYLimit, spawnZBackJitter, spawnZForwardJitter);
+            spawnXLimit, spawnYLimit, spawnZBackJitter, spawnZForwardJitter, worldSpeed);
 
         lastEncounterPattern = plan.PatternName;
         lastSafeLane = plan.SafeLane;
         SpawnAsteroidAt(plan.First.Position, plan.First.Radius);
         if (plan.Count > 1)
             SpawnAsteroidAt(plan.Second.Position, plan.Second.Radius);
+        if (plan.Count > 2)
+            SpawnAsteroidAt(plan.Third.Position, plan.Third.Radius);
 
-        return plan.DelayMultiplier;
+        if (plan.Count <= 1) return plan.DelayMultiplier;
+
+        // Do not schedule the next formation just because the first obstacle was spawned.
+        // Its second member must arrive, then the player gets a short recovery/read beat.
+        // Use cruise speed for the timing budget: if boost is released during the formation,
+        // the spacing remains fair as the world decelerates. Pair depth expands at boost speed,
+        // and this pacing calculation prevents that expansion from overlapping the next group.
+        Vector3 finalHazardPosition = plan.Count > 2 ? plan.Third.Position : plan.Second.Position;
+        float formationDepth = Mathf.Abs(finalHazardPosition.z - plan.First.Position.z);
+        const float worstDepthJitterDelta = 5f; // two independently jittered encounter centres (±2.5 m)
+        const float safetyMargin = 1f;
+        const float recoveryBeatSeconds = 0.20f;
+        float conservativeDistance = formationDepth + worstDepthJitterDelta + safetyMargin;
+        float requiredFormationInterval = conservativeDistance / Mathf.Max(1f, baseWorldSpeed)
+            + recoveryBeatSeconds;
+        float difficulty = Mathf.Clamp(1f - elapsed * difficultyRampPerSecond,
+            minimumSpawnInterval / Mathf.Max(initialSpawnInterval, 0.01f), 1f);
+        float nominalInterval = initialSpawnInterval * difficulty;
+        return Mathf.Max(plan.DelayMultiplier,
+            requiredFormationInterval / Mathf.Max(0.01f, nominalInterval));
+    }
+
+    private GameObject GetFallbackAsteroidPrefab()
+    {
+        if (fallbackAsteroidModels == null)
+        {
+            var available = new System.Collections.Generic.List<GameObject>(3);
+            string[] resourceNames =
+            {
+                "PF_Asteroid_Meteor",
+                "PF_Asteroid_Crystal",
+                "PF_Asteroid_MoonRock"
+            };
+            for (int i = 0; i < resourceNames.Length; i++)
+            {
+                GameObject prefab = Resources.Load<GameObject>(resourceNames[i]);
+                if (prefab != null) available.Add(prefab);
+                else Debug.LogWarning("[VOIDLINE] Optional asteroid prefab not found: Resources/" + resourceNames[i]);
+            }
+            fallbackAsteroidModels = available.ToArray();
+            if (fallbackAsteroidModels.Length == 0)
+                Debug.LogWarning("[VOIDLINE] No authored asteroid prefabs found; using the emergency sphere fallback.");
+        }
+
+        return fallbackAsteroidModels.Length > 0
+            ? fallbackAsteroidModels[NextRandomInt(0, fallbackAsteroidModels.Length)]
+            : null;
     }
 
     private void SpawnAsteroidAt(Vector3 spawnPosition, float radius)
@@ -999,21 +1103,38 @@ public sealed class VoidlineGameManager : MonoBehaviour
             GameObject selectedPrefab = usePrefab
                 ? asteroidPrefabs[NextRandomInt(0, asteroidPrefabs.Length)]
                 : null;
-            GameObject asteroid = usePrefab
-                ? Instantiate(selectedPrefab)
-                : GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            GameObject asteroid;
+            if (usePrefab)
+            {
+                asteroid = Instantiate(selectedPrefab);
+            }
+            else
+            {
+                GameObject asteroidPrefab = GetFallbackAsteroidPrefab();
+                // Use the authored prefabs rather than inventing a smooth sphere at runtime. The
+                // prefabs carry distinct faceted meteor, crystal and moon-rock silhouettes/materials.
+                asteroid = asteroidPrefab != null
+                    ? Instantiate(asteroidPrefab)
+                    : GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            }
+
             asteroid.name = "Asteroid";
             asteroid.SetActive(false);
 
             if (!usePrefab)
             {
-                Renderer renderer = asteroid.GetComponent<Renderer>();
-                if (renderer != null) renderer.sharedMaterial = asteroidMaterial;
+                Renderer[] renderers = asteroid.GetComponentsInChildren<Renderer>(true);
+                for (int i = 0; i < renderers.Length; i++)
+                    if (renderers[i].sharedMaterial == null && asteroidMaterial != null)
+                        renderers[i].sharedMaterial = asteroidMaterial;
             }
 
             SphereCollider collider = asteroid.GetComponent<SphereCollider>();
             if (collider == null) collider = asteroid.AddComponent<SphereCollider>();
             collider.isTrigger = true;
+            // The encounter planner radius is the intended collision footprint. The previous
+            // default 0.5 sphere collider silently halved it, making hazards much easier than planned.
+            collider.radius = 0.88f;
             Rigidbody body = asteroid.GetComponent<Rigidbody>();
             if (body == null) body = asteroid.AddComponent<Rigidbody>();
             body.isKinematic = true;
@@ -1141,31 +1262,49 @@ public sealed class VoidlineGameManager : MonoBehaviour
 
         bonusPoints += reward;
         if (audioFeedback != null) audioFeedback.PlayPassageClear();
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(
+            isTransitGate ? 0.72f : 0.58f, isTransitGate ? 5.2f : 4.0f);
         if (cameraEffects != null) cameraEffects.AddTrauma(isTransitGate ? 0.16f : 0.09f);
         string passageLabel = isTransitGate
             ? "TRANSIT GATE CLEARED"
             : "HOLLOW ARCH CLEARED";
         ShowMilestoneMessage(passageLabel + "  //  SECTOR " +
             (passagesCleared + 1).ToString("D2") + "  //  +" + reward, 2.4f);
+        // Queue the Clinger telegraph after the crossing callout so a single UI event
+        // cannot overwrite the incoming-threat warning on the same frame.
+        if (clingerEncounter != null) clingerEncounter.NotifyPassageCrossed(passagesCleared);
         RefreshHud();
     }
 
-    public void RegisterNearMiss(Vector3 hazardPosition)
+    public void RegisterNearMiss(Vector3 hazardPosition, float hazardScale)
     {
         if (gameOver || player == null) return;
 
         float dx = Mathf.Abs(hazardPosition.x - player.position.x);
         float dy = Mathf.Abs(hazardPosition.y - player.position.y);
-        // Approximate a conservative combined ship+asteroid collision footprint, then
-        // reward only close clearances outside that footprint (not distant misses).
-        float clearance = Mathf.Sqrt((dx / 1.45f) * (dx / 1.45f) +
-            (dy / 0.88f) * (dy / 0.88f));
+        // Match the near-miss envelope to the actual pooled hazard scale. Small rocks should
+        // permit a closer skim than a large one; the band starts just outside the collision
+        // footprint and ends before a visibly distant pass can farm the flow reward.
+        float obstacleHalfWidth = Mathf.Clamp(hazardScale, 0.45f, 1.1f) * 0.51f;
+        float obstacleHalfHeight = Mathf.Clamp(hazardScale, 0.45f, 1.1f) * 0.48f;
+        float combinedX = 1.03f + obstacleHalfWidth;
+        float combinedY = 0.42f + obstacleHalfHeight;
+        float clearance = Mathf.Sqrt((dx / combinedX) * (dx / combinedX) +
+            (dy / combinedY) * (dy / combinedY));
         if (clearance <= 1f || clearance > 1.55f) return;
+
+        // A near miss only contributes to the Clinger's scrape-off when it occurs inside the
+        // player's active roll-dodge window. An ordinary clean near miss still receives its
+        // normal flow reward, but cannot remove the attached creature by itself.
+        if (clingerEncounter != null)
+            clingerEncounter.NotifyClosePass(playerController != null && playerController.IsDodgeActive);
 
         nearMisses++;
         int chain = AdvanceFlowChain();
         int reward = 30 + Mathf.Min(chain - 1, 5) * 10;
         bonusPoints += reward;
+        if (adaptiveMusic != null) adaptiveMusic.PulseIntensity(
+            Mathf.Min(0.78f, 0.42f + chain * 0.055f), 2.8f + Mathf.Min(chain, 6) * 0.45f);
         if (audioFeedback != null) audioFeedback.PlayNearMiss();
         if (cameraEffects != null) cameraEffects.AddTrauma(0.025f);
         ShowMilestoneMessage("NEAR MISS  //  FLOW x" + chain + "  //  +" + reward, 1.25f);
@@ -1179,7 +1318,9 @@ public sealed class VoidlineGameManager : MonoBehaviour
         if (audioFeedback != null) audioFeedback.PlayPass();
         RefreshHud();
     }
-    public void TakeDamage()
+    public void TakeDamage() => TakeDamage(player != null ? player.position + Vector3.right : Vector3.right);
+
+    public void TakeDamage(Vector3 impactSource)
     {
         if (gameOver || Time.time < nextDamageAt) return;
 
@@ -1187,32 +1328,49 @@ public sealed class VoidlineGameManager : MonoBehaviour
         hull = Mathf.Max(0, hull - 1);
         flowChain = 0;
         flowChainExpiresAt = 0f;
-        damageFlashAlpha = 0.26f;
+        damageFlashAlpha = hull <= 0 ? 0.28f : 0.12f;
+        // A survivable collision nudges the craft away from the impact over a short window.
+        // The controller remains enabled, keeps accepting steer input, and clamps the result
+        // to the existing flight envelope; lethal hits skip the displacement.
+        if (hull > 0 && playerController != null)
+            playerController.ApplyImpactDeflection(impactSource);
         if (audioFeedback != null) audioFeedback.PlayDamage();
-        if (cameraEffects != null) cameraEffects.AddTrauma(0.28f);
+        if (cameraEffects != null)
+        {
+            float deflectionDirection = player != null && impactSource.x < player.position.x ? 1f : -1f;
+            cameraEffects.TriggerFieldDeflection(deflectionDirection);
+        }
         RefreshHud();
 
-        if (hull <= 0) EndRun();
+        if (hull <= 0) EndRun(impactSource);
     }
-    private void EndRun()
+    private void EndRun(Vector3 impactSource)
     {
         if (gameOver) return;
 
         gameOver = true;
+        if (clingerEncounter != null) clingerEncounter.StopEncounter();
         ClearBoostPresentation();
-        // Freeze the corridor and distant set pieces too; the end screen should not drift.
-        if (corridorScroller != null) corridorScroller.SetSpeed(0f);
+
+        // Fatal contact gets one concise, directional wreck beat before the results overlay.
+        // Keep the deep-space world drifting slowly through the first half-second so the
+        // craft's attitude loss feels physical, then freeze the entire scene for the score.
+        if (corridorScroller != null) corridorScroller.SetSpeed(baseWorldSpeed * 0.18f);
+        if (playerController != null) playerController.PlayFinalCrash(impactSource);
+        if (flightEffects != null) flightEffects.TriggerFinalDischarge();
+        if (cameraEffects != null)
+        {
+            float direction = player != null && impactSource.x < player.position.x ? 1f : -1f;
+            cameraEffects.TriggerFinalImpact(direction);
+        }
         int finalScore = GetScore();
         if (finalScore > bestScore) bestScore = finalScore;
         PlayerPrefs.SetInt("VOIDLINE_BEST_SCORE", bestScore);
         PlayerPrefs.Save();
         if (audioFeedback != null) audioFeedback.PlayGameOver();
-        if (cameraEffects != null) cameraEffects.AddTrauma(0.55f);
-
         paused = false;
         Time.timeScale = 1f;
         if (overlayButtonLabel != null) overlayButtonLabel.text = "RESTART RUN";
-        if (playerController != null) playerController.SetControlEnabled(false);
         foreach (VoidlineAsteroid asteroid in FindObjectsByType<VoidlineAsteroid>())
             asteroid.SetMotionEnabled(false);
         foreach (VoidlinePickup pickup in FindObjectsByType<VoidlinePickup>())
@@ -1223,8 +1381,19 @@ public sealed class VoidlineGameManager : MonoBehaviour
             "BEST   " + bestScore.ToString("D5") + System.Environment.NewLine +
             "SECTOR " + (passagesCleared + 1).ToString("D2") + "   ROUTE #" +
             (routeDirector != null ? routeDirector.RunSeed.ToString("D8") : "00000000");
-        gameOverPanel.SetActive(true);
+        gameOverPanel.SetActive(false);
+        if (fatalImpactRoutine != null) StopCoroutine(fatalImpactRoutine);
+        fatalImpactRoutine = StartCoroutine(RevealResultsAfterFatalImpact());
     }
+
+    private IEnumerator RevealResultsAfterFatalImpact()
+    {
+        yield return new WaitForSecondsRealtime(1.12f);
+        if (corridorScroller != null) corridorScroller.SetSpeed(0f);
+        if (gameOverPanel != null) gameOverPanel.SetActive(true);
+        fatalImpactRoutine = null;
+    }
+
     private int AdvanceFlowChain()
     {
         if (Time.time > flowChainExpiresAt) flowChain = 0;

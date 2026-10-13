@@ -37,3 +37,18 @@ This section supersedes the earlier imported-arch scale assumption in the initia
 2. Compare the four palettes at real gameplay scale; adjust them if the transition is technically smooth but not perceptually clear.
 3. Continue the environment pass with stronger long-range silhouettes and measured object visibility. Preserve negative space around the craft and hazards.
 4. Only then move to deeper encounter-pacing, collision, and creature phases. A clean Console snapshot does not replace a controlled gameplay check.
+
+
+## 2026-10-13 — Runtime scenery churn / next phase pass
+
+- The distant asteroid field and sector monuments shared a scroll/scale list, but each background rock was previously instantiated and destroyed as it entered/leaves the camera range. The field updates several times per second for a long run, so that churn is avoidable.
+- Added a reusable pool for distant asteroid scenery only. Each newly created rock is put inactive before its colliders/rigidbodies/gameplay script are disabled, then restored at a new route-relative position with a seeded rotation and scale-in. Its imported base scale is cached once and never multiplied cumulatively on reuse.
+- Explicitly distinguish poolable far-field rocks from large sector monuments. Sector arches/relics use a different authored role and must be destroyed/retired as monuments; they may not be recycled into the regular rock field.
+- Restart returns active far-field rocks to the pool and retires active sector monuments, while preserving the deterministic random seed reset. This keeps the environment from gradually accumulating unique scene objects between runs.
+- This is a source-level lifecycle/performance change. Unity compile and a prolonged live run are still needed to validate that pooled objects do not retain a stale target scale/position and that a restart resets the field cleanly.
+
+### Next environment-to-gameplay gate
+
+1. Use a fresh 30–60 second Play Mode run to read the ship against open-space negative space and at least one distant sector cue; verify there is no sudden rock pop, no tunnel return, no duplicate landmark reward, and no scenery collider.
+2. Run a restart in the same Editor session; verify old active scenery is retired, route/landmark seed starts at the same sequence, and no scale grows from previous pool uses.
+3. Promote Phase 4/5 only after the run demonstrates readable boosted pair spacing and recovery beats. The isolated encounter fuzz result (500k plans) is an additional safety check, not a substitute for the run.

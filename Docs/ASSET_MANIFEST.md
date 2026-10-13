@@ -17,20 +17,22 @@
 | M_Pickup_Repair.mat | Teal/green emissive repair-cell material |
 | M_Tunnel_Accent.mat | Cyan emissive corridor rails |
 | VoidlineRunSettings.asset | Editable run tuning |
+| VOIDLINE_Clinger.fbx | Bespoke Phase 6 enemy-attachment art prototype; 35 mesh parts / 3,620 triangles, no gameplay collider or animation authored yet |
+| VOIDLINE_Clinger.blend | Editable Blender source for the Clinger prototype, with dark chitin, armor plates, hooked limbs and restrained emissive details |
 
 ## Music
 
 | Asset | Purpose |
 |---|---|
-| Space Threat (Slow Ambient Version, Looped).wav | Cruise bed — `Music_Ambient` layer |
-| Space Threat (Electronic Dramatic Version, Looped).wav | Tension and critical-hull layers |
-| Space Threat (Energetic Powerful Version, Looped).wav | Boost layer |
+| Space Threat (Slow Ambient Version, Looped).wav | Cruise arrangement |
+| Space Threat (Electronic Dramatic Version, Looped).wav | Critical-hull / danger arrangement |
+| Space Threat (Energetic Powerful Version, Looped).wav | Boost and skill-flow arrangement |
 
 - Source: **Space Threat (Free Action Music)**, Unity Asset Store productId 205935, package v1.0.
-- Only the three "Looped" stems are used; the non-looped masters are not loaded. Copies live in
+- The pack provides three complete alternate versions (not isolated stems); only the three "Looped" versions are used, while non-looped masters are not loaded. Copies live in
   `Assets/Resources` (so `Resources.Load` resolves them) with their original `.meta` GUIDs intact;
   the originals remain under `Assets/Space Threat (Action Cinematic Music)`.
-- Driven by `VoidlineAdaptiveMusic`; layer levels are `[SerializeField]` and untuned.
+- Driven by `VoidlineAdaptiveMusic` using intensity-memory crossfades. Current hold/release and track-level values are provisional pending listening QA.
 - Licence terms must be checked before shipping or redistributing.
 
 
