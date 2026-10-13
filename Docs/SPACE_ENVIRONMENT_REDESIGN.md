@@ -5,13 +5,13 @@
 
 ## The sky asset is being replaced completely
 
-The primary sky is no longer `M_VOIDLINE_DarkSpace` and no longer depends on the old dark panorama or its procedural nebula fallback. The new primary art is three distinct, real 10,000×5,000 equirectangular images from **[Space Spheremaps](https://www.spacespheremaps.com/)**, imported into the project's Art folder:
+The primary sky is no longer `M_VOIDLINE_DarkSpace`. Three adapted, real celestial panoramas are bundled under `Assets/VOIDLINE/Resources/SpacePanoramas` so the replacement is the default on a clean checkout. They were sourced from **[Space Spheremaps](https://www.spacespheremaps.com/)**, originally 10,000×5,000 equirectangular PNGs, and optimised to 4096×2048 JPEGs for a 1080p game camera:
 
 - [Multi Nebulae 1](https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_1.png): richly multicoloured nebula clouds.
 - [Galactic Plane 1](https://www.spacespheremaps.com/wp-content/uploads/galactic_plane_1.png): a brighter Milky Way-style star/galaxy band.
 - [Blue Nebulae 1](https://www.spacespheremaps.com/wp-content/uploads/blue_nebulae_1.png): a cyan/blue-biased nebula for a cooler sector.
 
-The official [Multi-nebulae page](https://www.spacespheremaps.com/multi-nebulae-spheremaps/), [Galactic Plane page](https://www.spacespheremaps.com/galactic-plane-spheremaps/) and [Blue Nebulae page](https://www.spacespheremaps.com/blue-nebulae-spheremaps/) list these PNGs at about 11 MB each. The author's [licensing terms](https://www.spacespheremaps.com/about/) explicitly permit use and modification in commercial games; no attribution is required, but credit is appreciated. Source textures are downloaded into `Assets/VOIDLINE/Art/External/SpaceSpheremaps`; this is real authored background art, not a generated colour grade.
+The official [Multi-nebulae page](https://www.spacespheremaps.com/multi-nebulae-spheremaps/), [Galactic Plane page](https://www.spacespheremaps.com/galactic-plane-spheremaps/) and [Blue Nebulae page](https://www.spacespheremaps.com/blue-nebulae-spheremaps/) list these PNGs at about 11 MB each. The author's [licensing terms](https://www.spacespheremaps.com/about/) explicitly allow commercial use and adaptation; the site says attribution is not required, though credit is appreciated. The project stores optimised adaptations rather than the original full-size PNG files. This is actual authored sky art, not a generated colour grade.
 
 A new `Skybox/VOIDLINE Celestial Blend` shader crossfades between those panoramas when the player passes a sector landmark. That changes the underlying sky image rather than only tinting one texture. The editor importer also creates a serialized Resources material so the shader is explicitly referenced by player builds. Panorama import settings use high-quality texture compression, mipmaps, texture streaming, and an 8K max import size to balance detail with GPU memory.
 
@@ -23,10 +23,10 @@ For more detailed planetary surface materials, the optional free [Procedural Pla
 
 ## Use the new sky in Unity
 
-1. Pull the `environment/celestial-world-redesign` branch (or use its pull request).
-2. In Unity, run **VOIDLINE → Environment → Download Multicolour Space Panoramas (33 MB)** once. This fetches the three licensed PNGs, imports them with the correct equirectangular texture settings, generates the Resources blend material, and writes the image references into `Assets/VOIDLINE/Resources/VOIDLINE_CelestialAssetSet.asset`.
-3. Enter Play Mode. The runtime selects an authored panorama instead of the old dark sky, slowly drifts it, and crossfades to another panorama on actual landmark crossing. It builds the distant planetary layer and still supports a procedural fallback only if an external image download fails.
-4. For higher-detail planet surfaces, import Procedural Planet Generation - Lite and run **VOIDLINE → Environment → Build Celestial Asset Set**. Inspect its populated arrays and replace any incorrect auto-matched material/texture by reference to the proper imported source asset.
+1. Pull the `environment/celestial-world-redesign` branch (or use its pull request). The three panorama images and `M_VOIDLINE_CelestialBlend.mat` are already included; no skybox package import or download is required.
+2. Enter Play Mode. The runtime loads the real panoramas from `Resources/SpacePanoramas`, slowly drifts the sky, and crossfades to a different source image on actual landmark crossing. It starts in open space and builds the distant planetary layer. The brighter procedural panorama is only a fallback if a bundled image cannot be loaded.
+3. The optional **VOIDLINE → Environment → Refresh Multicolour Space Panoramas (33 MB)** menu can re-download the original PNG source versions when internet access is available.
+4. For higher-detail 3D planet surfaces, import Procedural Planet Generation - Lite and run **VOIDLINE → Environment → Build Celestial Asset Set**. Inspect its populated arrays and replace any incorrect auto-matched material/texture by reference to the proper imported source asset.
 
 ## Future enemy readability
 
