@@ -697,6 +697,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         if (dt <= 0f) return;
 
         UpdateSectorTransition(dt);
+        // A very slow equirectangular drift gives the sky tangible scale without turning
+        // distant clouds into distracting motion behind an incoming enemy tell.
+        if (activeSkyboxMaterial != null && activeSkyboxMaterial.HasProperty("_Rotation"))
+        {
+            float rotation = (activeSkyboxMaterial.GetFloat("_Rotation") + dt * 0.16f) % 360f;
+            activeSkyboxMaterial.SetFloat("_Rotation", rotation);
+        }
         float speed = corridorScroller != null ? corridorScroller.Speed : 12f;
         float distanceStep = Mathf.Max(0f, speed * dt);
         distanceTravelled += distanceStep;
