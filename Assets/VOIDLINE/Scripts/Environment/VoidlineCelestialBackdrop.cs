@@ -177,12 +177,16 @@ public sealed class VoidlineCelestialBackdrop : MonoBehaviour
             name = "VOIDLINE / Fallback " + kind + " Surface",
             hideFlags = HideFlags.DontSave
         };
-        Texture2D texture = BuildSurfaceTexture(kind, baseColor, seed);
+        Texture2D texture = PickSurfaceTexture(kind, seed);
+        if (texture == null)
+        {
+            texture = BuildSurfaceTexture(kind, baseColor, seed);
+            if (texture != null) ownedTextures.Add(texture);
+        }
         if (texture != null)
         {
             if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
             if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
-            ownedTextures.Add(texture);
         }
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", baseColor);
         if (material.HasProperty("_Color")) material.SetColor("_Color", baseColor);
@@ -193,6 +197,18 @@ public sealed class VoidlineCelestialBackdrop : MonoBehaviour
         }
         ownedMaterials.Add(material);
         return material;
+    }
+
+    private Texture2D PickSurfaceTexture(BodyKind kind, int seed)
+    {
+        if (assetSet == null) return null;
+        switch (kind)
+        {
+            case BodyKind.GasGiant: return assetSet.PickGasGiantTexture(seed);
+            case BodyKind.Planet: return assetSet.PickPlanetTexture(seed);
+            case BodyKind.Moon: return assetSet.PickMoonTexture(seed);
+            default: return null;
+        }
     }
 
     private static Texture2D BuildSurfaceTexture(BodyKind kind, Color baseColor, int seed)
