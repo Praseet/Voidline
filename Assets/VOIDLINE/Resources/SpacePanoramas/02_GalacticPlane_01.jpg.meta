@@ -81,7 +81,7 @@ TextureImporter:
     overridden: 0
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6_HQ: 0
+    forceMaximumCompressionQuality_BC6_BC7: 0
   - serializedVersion: 4
     buildTarget: Standalone
     maxTextureSize: 4096
