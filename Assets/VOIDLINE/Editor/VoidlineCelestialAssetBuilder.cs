@@ -18,29 +18,31 @@ public static class VoidlineCelestialAssetBuilder
     private static readonly string[] PanoramaUrls =
     {
         "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_1.png",
-        "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_2.png",
-        "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_3.png"
+        "https://www.spacespheremaps.com/wp-content/uploads/galactic_plane_1.png",
+        "https://www.spacespheremaps.com/wp-content/uploads/blue_nebulae_1.png"
     };
     private static readonly string[] PanoramaFileNames =
     {
         "VOIDLINE_MultiNebula_01.png",
-        "VOIDLINE_MultiNebula_02.png",
-        "VOIDLINE_MultiNebula_03.png"
+        "VOIDLINE_GalacticPlane_01.png",
+        "VOIDLINE_BlueNebula_01.png"
     };
     private const string PanoramaFolder = "Assets/VOIDLINE/Art/External/SpaceSpheremaps";
     private static readonly List<Texture2D> downloadedPanoramas = new List<Texture2D>(3);
     private static int panoramaDownloadIndex;
     private static int panoramaDownloadErrors;
+    private static bool isDownloadingPanoramas;
 
     [MenuItem("VOIDLINE/Environment/Download Multicolour Space Panoramas (33 MB)")]
     public static void DownloadSpacePanoramas()
     {
-        if (downloadedPanoramas.Count > 0)
+        if (isDownloadingPanoramas)
         {
             Debug.LogWarning("[VOIDLINE] A panorama download is already in progress.");
             return;
         }
 
+        isDownloadingPanoramas = true;
         downloadedPanoramas.Clear();
         panoramaDownloadIndex = 0;
         panoramaDownloadErrors = 0;
@@ -167,6 +169,7 @@ public static class VoidlineCelestialAssetBuilder
         finally
         {
             downloadedPanoramas.Clear();
+            isDownloadingPanoramas = false;
             EditorUtility.ClearProgressBar();
         }
     }
