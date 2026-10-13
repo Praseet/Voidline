@@ -55,7 +55,7 @@ public static class VoidlineCelestialAssetBuilder
         AssetDatabase.SaveAssets();
     }
 
-    [MenuItem("VOIDLINE/Environment/Download Multicolour Space Panoramas (33 MB)")]
+    [MenuItem("VOIDLINE/Environment/Refresh Multicolour Space Panoramas (33 MB)")]
     public static void DownloadSpacePanoramas()
     {
         if (isDownloadingPanoramas)
