@@ -10,6 +10,8 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     [Header("Distant Space")]
     [Tooltip("Space panorama/cubemap materials from the installed skybox asset pack.")]
     [SerializeField] private Material[] spaceSkyboxes;
+    [Tooltip("Official Space Spheremaps equirectangular nebula/galaxy panoramas, downloaded by the editor asset tool.")]
+    [SerializeField] private Texture2D[] spacePanoramas;
     [Header("Planet Surface Materials")]
     [SerializeField] private Material[] planetMaterials;
     [SerializeField] private Material[] gasGiantMaterials;
@@ -20,7 +22,7 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     [SerializeField] private Texture2D[] planetTextures;
     [SerializeField] private Texture2D[] gasGiantTextures;
     [SerializeField] private Texture2D[] moonTextures;
-    [Header("Authored Celestial Prefabs (optional)")
+    [Header("Authored Celestial Prefabs (optional)")]
     [SerializeField] private GameObject[] planetPrefabs;
     [SerializeField] private GameObject[] gasGiantPrefabs;
     [SerializeField] private GameObject[] moonPrefabs;
@@ -28,6 +30,7 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     [SerializeField] private GameObject[] ringPrefabs;
 
     public Material PickSpaceSkybox(int seed) => Pick(spaceSkyboxes, seed);
+    public Texture2D PickSpacePanorama(int seed) => Pick(spacePanoramas, seed);
     public Material PickPlanetMaterial(int seed) => Pick(planetMaterials, seed);
     public Material PickGasGiantMaterial(int seed) => Pick(gasGiantMaterials, seed);
     public Material PickMoonMaterial(int seed) => Pick(moonMaterials, seed);
@@ -44,6 +47,7 @@ public sealed class VoidlineCelestialAssetSet : ScriptableObject
     public GameObject PickRingPrefab(int seed) => Pick(ringPrefabs, seed);
 
     public int SpaceSkyboxCount => Count(spaceSkyboxes);
+    public int SpacePanoramaCount => Count(spacePanoramas);
     public int PlanetMaterialCount => Count(planetMaterials);
     public int GasGiantMaterialCount => Count(gasGiantMaterials);
     public int MoonMaterialCount => Count(moonMaterials);
