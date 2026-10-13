@@ -53,7 +53,12 @@ public static class VoidlineCelestialAssetBuilder
             string shader = material.shader != null ? material.shader.name.ToLowerInvariant() : string.Empty;
             string key = name + " " + source;
             bool hasSkyWords = ContainsAny(key, "space", "cosmic", "galaxy", "nebula", "starfield", "skybox");
-            bool isSky = hasSkyWords && (shader.Contains("skybox") || name.Contains("skybox") ||
+            // Explicitly exclude the old local VOIDLINE panorama: it is deliberately no longer
+            // the primary environment and must not be rediscovered by this new asset scan.
+            bool legacyDarkVoidlineSky = name.Contains("m_voidline_darkspace") ||
+                source.Contains("spaceskiespurple2k") || source.Contains("m_voidline_darkspace");
+            bool isSky = !legacyDarkVoidlineSky && hasSkyWords &&
+                (shader.Contains("skybox") || name.Contains("skybox") ||
                 source.Contains("skybox") || shader.Contains("panoramic"));
             if (isSky) skyboxes.Add(material);
 
