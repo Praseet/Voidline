@@ -146,7 +146,7 @@ public static class VoidlineCelestialAssetBuilder
             importer.wrapMode = TextureWrapMode.Repeat;
             importer.filterMode = FilterMode.Trilinear;
             importer.anisoLevel = 4;
-            importer.maxTextureSize = 8192;
+            importer.maxTextureSize = 4096;
             importer.textureCompression = TextureImporterCompression.CompressedHQ;
             importer.streamingMipmaps = true;
             importer.SaveAndReimport();
