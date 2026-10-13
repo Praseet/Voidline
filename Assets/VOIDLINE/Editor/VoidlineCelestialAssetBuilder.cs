@@ -86,12 +86,15 @@ public static class VoidlineCelestialAssetBuilder
             if (ContainsAny(key, "normal", "_n.", "_n_", "orm", "roughness", "metallic",
                 "height", "specular", "emission", "mask", "ambient occlusion", "_ao", "bump"))
                 continue;
+            bool celestialTexture = ContainsAny(key, "planet", "gas giant", "gasgiant", "jupiter",
+                "saturn", "moon", "lunar", "cratered", "terrestrial", "oceanic", "earth", "celestial");
+            if (!celestialTexture) continue;
 
             if (ContainsAny(key, "gas giant", "gasgiant", "jupiter", "saturn", "banded giant"))
                 gasGiantTextures.Add(texture);
             else if (ContainsAny(key, "moon", "lunar", "cratered"))
                 moonTextures.Add(texture);
-            else if (ContainsAny(key, "planet", "terrestrial", "oceanic", "earth", "albedo", "diffuse"))
+            else
                 planetTextures.Add(texture);
         }
 
