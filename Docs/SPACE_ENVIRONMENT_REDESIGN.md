@@ -24,7 +24,7 @@ The runtime composition is deliberately asymmetric and uses a few large landmark
 
 1. In Unity's Package Manager, open **My Assets**, find Procedural Planet Generation - Lite, download it, and import the needed skybox and celestial shader/material samples. Do not import all 683 MB of the optional static-sky package as a first step.
 2. In the editor, run **VOIDLINE → Environment → Build Celestial Asset Set**.
-3. Open `Assets/VOIDLINE/Resources/VOIDLINE_CelestialAssetSet.asset`. Review its arrays. The builder auto-fills categories when it finds matching names, but asset-pack naming can vary; if a slot is empty, drag the matching imported skybox/material/prefab into that array. Keep the references pointed at the original imported assets.
+3. Open `Assets/VOIDLINE/Resources/VOIDLINE_CelestialAssetSet.asset`. Review its arrays. The builder auto-fills categories when it finds matching names, including baked colour textures as well as materials/prefabs. Asset-pack naming can vary; if a slot is empty, drag the matching imported skybox/material/colour texture/prefab into that array. Keep the references pointed at the original imported assets. The runtime prefers the package's authored material, then its baked colour texture, and only then uses the procedural fallback texture.
 4. Enter Play Mode. `VoidlineSpaceSequence` loads `VOIDLINE_CelestialAssetSet`, installs the selected celestial skybox instead of `M_VOIDLINE_DarkSpace`, and creates the far-field planet composition. If the optional package is absent, a brighter colourful fallback keeps the run playable; this is not the intended final art.
 
 ## Future enemy readability
