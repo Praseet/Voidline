@@ -82,6 +82,11 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     private Material ownedSectorSkybox;
     private Material runtimeFallbackSkybox;
     private Texture2D runtimeFallbackSkyTexture;
+    private Texture2D currentSpacePanorama;
+    private Texture2D targetSpacePanorama;
+    private int initialSpacePanoramaIndex;
+    private int currentSpacePanoramaIndex;
+    private int targetSpacePanoramaIndex;
     private AmbientMode previousAmbientMode;
     private float previousAmbientIntensity;
     private bool previousFog;
@@ -125,29 +130,77 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
 
         if (installSpaceSkybox)
         {
-            // The old dark panorama is retired. Prefer the imported 4K celestial skybox,
-            // which carries stars/nebula/galaxies behind the authored 3D planetary layer.
-            Material spaceSky = celestialAssetSet != null
+            // First choice is real, authored 10k multicolour nebula panoramas. The former
+            // near-black SpaceSkies material is intentionally not selected as the environment.
+            Texture2D panorama = null;
+            if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
+            {
+                int seed = routeDirector != null ? routeDirector.RunSeed : 260412;
+                initialSpacePanoramaIndex = Mathf.Abs(seed == int.MinValue ? 0 : seed) %
+                    Mathf.Max(1, celestialAssetSet.SpacePanoramaCount);
+                currentSpacePanoramaIndex = initialSpacePanoramaIndex;
+                panorama = celestialAssetSet.PickSpacePanorama(currentSpacePanoramaIndex);
+            }
+
+            Material importedSky = celestialAssetSet != null
                 ? celestialAssetSet.PickSpaceSkybox(routeDirector != null ? routeDirector.RunSeed : 260412)
                 : null;
-            if (spaceSky != null && HasCompleteSixSidedSkybox(spaceSky))
+            Shader celestialShader = Shader.Find("Skybox/VOIDLINE Celestial Blend");
+            if (panorama != null && celestialShader != null)
             {
-                ownedSectorSkybox = new Material(spaceSky)
+                ownedSectorSkybox = new Material(celestialShader)
                 {
-                    name = "VOIDLINE / Runtime Celestial Sky",
+                    name = "VOIDLINE / Multi-Nebula Celestial World",
+                    hideFlags = HideFlags.DontSave
+                };
+                ownedSectorSkybox.SetTexture("_TexA", panorama);
+                ownedSectorSkybox.SetTexture("_TexB", panorama);
+                ownedSectorSkybox.SetFloat("_Blend", 0f);
+                currentSpacePanorama = panorama;
+                RenderSettings.skybox = ownedSectorSkybox;
+            }
+            else if (panorama != null)
+            {
+                // Texture panorama fallback, still uses the actual downloaded art if the
+                // custom blend shader has not imported yet.
+                Shader panoramicShader = Shader.Find("Skybox/Panoramic");
+                if (panoramicShader != null)
+                {
+                    ownedSectorSkybox = new Material(panoramicShader)
+                    {
+                        name = "VOIDLINE / Authored Space Panorama",
+                        hideFlags = HideFlags.DontSave
+                    };
+                    ownedSectorSkybox.SetTexture("_MainTex", panorama);
+                    if (ownedSectorSkybox.HasProperty("_ImageType")) ownedSectorSkybox.SetFloat("_ImageType", 0f);
+                    if (ownedSectorSkybox.HasProperty("_Mapping")) ownedSectorSkybox.SetFloat("_Mapping", 1f);
+                    if (ownedSectorSkybox.HasProperty("_Exposure")) ownedSectorSkybox.SetFloat("_Exposure", 1.1f);
+                    if (ownedSectorSkybox.HasProperty("_Rotation")) ownedSectorSkybox.SetFloat("_Rotation", 0f);
+                    currentSpacePanorama = panorama;
+                    RenderSettings.skybox = ownedSectorSkybox;
+                }
+            }
+
+            if (RenderSettings.skybox != ownedSectorSkybox && importedSky != null &&
+                HasCompleteSixSidedSkybox(importedSky))
+            {
+                ownedSectorSkybox = new Material(importedSky)
+                {
+                    name = "VOIDLINE / Runtime Authored Celestial Sky",
                     hideFlags = HideFlags.DontSave
                 };
                 RenderSettings.skybox = ownedSectorSkybox;
             }
-            else
+
+            if (RenderSettings.skybox != ownedSectorSkybox)
             {
-                // Clean checkouts without the optional art pack use a colourful fallback,
-                // not the former near-black panorama.
+                // A vivid procedural fallback exists only if the external panorama has not
+                // been downloaded or a valid authored space material is not present.
                 runtimeFallbackSkybox = CreateProceduralFallbackSkybox(out runtimeFallbackSkyTexture);
                 if (runtimeFallbackSkybox != null)
                     RenderSettings.skybox = runtimeFallbackSkybox;
                 else
-                    Debug.LogWarning("VOIDLINE could not find an authored celestial skybox or the built-in Panoramic shader.");
+                    Debug.LogWarning("VOIDLINE could not find a valid celestial panorama or the built-in Panoramic shader.");
             }
 
             activeSkyboxMaterial = RenderSettings.skybox;
@@ -156,21 +209,20 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 baseSkyTint = activeSkyboxMaterial.HasProperty("_Tint")
                     ? activeSkyboxMaterial.GetColor("_Tint")
                     : Color.white;
-                baseSkyTint = MultiplySkyTint(baseSkyTint, new Color(1f, 1.035f, 1.08f, 1f));
                 baseSkyExposure = activeSkyboxMaterial.HasProperty("_Exposure")
                     ? activeSkyboxMaterial.GetFloat("_Exposure")
                     : 1f;
-                baseSkyExposure = Mathf.Clamp(baseSkyExposure * 1.06f, 0.05f, 2.5f);
-                if (activeSkyboxMaterial.HasProperty("_Tint"))
-                    activeSkyboxMaterial.SetColor("_Tint", baseSkyTint);
                 if (activeSkyboxMaterial.HasProperty("_Exposure"))
+                {
+                    baseSkyExposure = Mathf.Clamp(baseSkyExposure * 1.06f, 0.05f, 2.5f);
                     activeSkyboxMaterial.SetFloat("_Exposure", baseSkyExposure);
+                }
                 sectorSkyStartTint = baseSkyTint;
                 sectorSkyTargetTint = baseSkyTint;
                 sectorSkyStartExposure = baseSkyExposure;
                 sectorSkyTargetExposure = baseSkyExposure;
                 RenderSettings.ambientMode = AmbientMode.Skybox;
-                RenderSettings.ambientIntensity = Mathf.Clamp(ambientLightScale, 0.38f, 0.62f);
+                RenderSettings.ambientIntensity = Mathf.Clamp(ambientLightScale, 0.42f, 0.68f);
                 baseSectorAmbientIntensity = RenderSettings.ambientIntensity;
                 sectorAmbientStart = baseSectorAmbientIntensity;
                 sectorAmbientTarget = baseSectorAmbientIntensity;
@@ -346,6 +398,25 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         sectorSkyTargetTint = MultiplySkyTint(baseSkyTint, tintMultiplier);
         sectorSkyTargetExposure = Mathf.Clamp(baseSkyExposure * exposureMultiplier, 0.02f, 2f);
         sectorAmbientTarget = baseSectorAmbientIntensity * ambientMultiplier;
+
+        // Crossfade into a genuinely different authored panorama on each sector crossing.
+        // This replaces the original same-texture colour-only "transition".
+        targetSpacePanorama = null;
+        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 1 &&
+            activeSkyboxMaterial != null && activeSkyboxMaterial.HasProperty("_TexA") &&
+            activeSkyboxMaterial.HasProperty("_TexB") && activeSkyboxMaterial.HasProperty("_Blend") &&
+            currentSpacePanorama != null)
+        {
+            targetSpacePanoramaIndex = (currentSpacePanoramaIndex + 1) % celestialAssetSet.SpacePanoramaCount;
+            targetSpacePanorama = celestialAssetSet.PickSpacePanorama(targetSpacePanoramaIndex);
+            if (targetSpacePanorama != null)
+            {
+                activeSkyboxMaterial.SetTexture("_TexA", currentSpacePanorama);
+                activeSkyboxMaterial.SetTexture("_TexB", targetSpacePanorama);
+                activeSkyboxMaterial.SetFloat("_Blend", 0f);
+            }
+        }
+
         sectorTransitionElapsed = 0f;
         sectorTransitionActive = true;
         SpawnSectorMonument((crossedLandmarks - 1) % 4);
@@ -367,12 +438,24 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             if (activeSkyboxMaterial.HasProperty("_Exposure"))
                 activeSkyboxMaterial.SetFloat("_Exposure",
                     Mathf.Lerp(sectorSkyStartExposure, sectorSkyTargetExposure, eased));
+            if (targetSpacePanorama != null && activeSkyboxMaterial.HasProperty("_Blend"))
+                activeSkyboxMaterial.SetFloat("_Blend", eased);
         }
         RenderSettings.ambientIntensity = Mathf.Lerp(sectorAmbientStart, sectorAmbientTarget, eased);
 
         if (t >= 1f)
         {
             sectorTransitionActive = false;
+            if (targetSpacePanorama != null && activeSkyboxMaterial != null &&
+                activeSkyboxMaterial.HasProperty("_TexA") && activeSkyboxMaterial.HasProperty("_TexB"))
+            {
+                currentSpacePanorama = targetSpacePanorama;
+                currentSpacePanoramaIndex = targetSpacePanoramaIndex;
+                activeSkyboxMaterial.SetTexture("_TexA", currentSpacePanorama);
+                activeSkyboxMaterial.SetTexture("_TexB", currentSpacePanorama);
+                if (activeSkyboxMaterial.HasProperty("_Blend")) activeSkyboxMaterial.SetFloat("_Blend", 0f);
+                targetSpacePanorama = null;
+            }
             if (activeSkyboxMaterial != null && RenderSettings.skybox == activeSkyboxMaterial)
                 DynamicGI.UpdateEnvironment();
         }
@@ -397,6 +480,10 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         sectorSkyTargetExposure = baseSkyExposure;
         sectorAmbientStart = baseSectorAmbientIntensity;
         sectorAmbientTarget = baseSectorAmbientIntensity;
+        targetSpacePanorama = null;
+        currentSpacePanoramaIndex = initialSpacePanoramaIndex;
+        if (celestialAssetSet != null && celestialAssetSet.SpacePanoramaCount > 0)
+            currentSpacePanorama = celestialAssetSet.PickSpacePanorama(initialSpacePanoramaIndex);
 
         if (activeSkyboxMaterial != null)
         {
@@ -404,6 +491,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 activeSkyboxMaterial.SetColor("_Tint", baseSkyTint);
             if (activeSkyboxMaterial.HasProperty("_Exposure"))
                 activeSkyboxMaterial.SetFloat("_Exposure", baseSkyExposure);
+            if (currentSpacePanorama != null && activeSkyboxMaterial.HasProperty("_TexA") &&
+                activeSkyboxMaterial.HasProperty("_TexB"))
+            {
+                activeSkyboxMaterial.SetTexture("_TexA", currentSpacePanorama);
+                activeSkyboxMaterial.SetTexture("_TexB", currentSpacePanorama);
+                if (activeSkyboxMaterial.HasProperty("_Blend")) activeSkyboxMaterial.SetFloat("_Blend", 0f);
+            }
         }
 
         RenderSettings.ambientIntensity = baseSectorAmbientIntensity;
