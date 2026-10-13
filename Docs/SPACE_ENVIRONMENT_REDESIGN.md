@@ -13,7 +13,7 @@ The primary sky is no longer `M_VOIDLINE_DarkSpace`. Three adapted, real celesti
 
 The official [Multi-nebulae page](https://www.spacespheremaps.com/multi-nebulae-spheremaps/), [Galactic Plane page](https://www.spacespheremaps.com/galactic-plane-spheremaps/) and [Blue Nebulae page](https://www.spacespheremaps.com/blue-nebulae-spheremaps/) list these PNGs at about 11 MB each. The author's [licensing terms](https://www.spacespheremaps.com/about/) explicitly allow commercial use and adaptation; the site says attribution is not required, though credit is appreciated. The project stores optimised adaptations rather than the original full-size PNG files. This is actual authored sky art, not a generated colour grade.
 
-A new `Skybox/VOIDLINE Celestial Blend` shader crossfades between those panoramas when the player passes a sector landmark. That changes the underlying sky image rather than only tinting one texture. The editor importer also creates a serialized Resources material so the shader is explicitly referenced by player builds. Panorama import settings use high-quality texture compression, mipmaps, texture streaming, and an 8K max import size to balance detail with GPU memory.
+A new `Skybox/VOIDLINE Celestial Blend` shader crossfades between those panoramas when the player passes a sector landmark. That changes the underlying sky image rather than only tinting one texture. The editor importer also creates a serialized Resources material so the shader is explicitly referenced by player builds. Panorama import settings use high-quality texture compression, mipmaps, texture streaming, and a 4K import cap to balance detail with GPU memory.
 
 ## Celestial bodies
 
@@ -38,7 +38,7 @@ For more detailed planetary surface materials, the optional free [Procedural Pla
 
 ## Validation required before this is considered finished
 
-The remote development-machine session was unavailable during this environment rewrite, so this branch has not yet been compiled or inspected in Unity. After importing the package and building the asset set, verify:
+The remote development-machine session was unavailable during this environment rewrite, so this branch has not yet been compiled or inspected in Unity. The sky assets are bundled and need no package import. After opening this branch in Unity, verify:
 - Startup and restart show open celestial space immediately; the old opening corridor does not render.
 - The selected 4K skybox material is a valid Skybox shader/material and renders correctly under URP.
 - The gas giant/ring, planet, moon and star appear inside the camera far plane with no clipping and no central-lane occlusion.
