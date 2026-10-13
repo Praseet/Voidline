@@ -4,15 +4,172 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Networking;
 
 /// <summary>
-/// Scans already-imported asset packs and references matching assets. It never downloads,
-/// duplicates, modifies, or redistributes their original source files.
+/// Imports official free space panoramas from Space Spheremaps and scans any locally imported
+/// celestial pack. Asset Store source files are referenced, never copied or redistributed.
 /// </summary>
 public static class VoidlineCelestialAssetBuilder
 {
     private const string ResourceFolder = "Assets/VOIDLINE/Resources";
     private const string ConfigPath = ResourceFolder + "/VOIDLINE_CelestialAssetSet.asset";
+
+    private static readonly string[] PanoramaUrls =
+    {
+        "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_1.png",
+        "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_2.png",
+        "https://www.spacespheremaps.com/wp-content/uploads/multi_nebulae_3.png"
+    };
+    private static readonly string[] PanoramaFileNames =
+    {
+        "VOIDLINE_MultiNebula_01.png",
+        "VOIDLINE_MultiNebula_02.png",
+        "VOIDLINE_MultiNebula_03.png"
+    };
+    private const string PanoramaFolder = "Assets/VOIDLINE/Art/External/SpaceSpheremaps";
+    private static readonly List<Texture2D> downloadedPanoramas = new List<Texture2D>(3);
+    private static int panoramaDownloadIndex;
+    private static int panoramaDownloadErrors;
+
+    [MenuItem("VOIDLINE/Environment/Download Multicolour Space Panoramas (33 MB)")]
+    public static void DownloadSpacePanoramas()
+    {
+        if (downloadedPanoramas.Count > 0)
+        {
+            Debug.LogWarning("[VOIDLINE] A panorama download is already in progress.");
+            return;
+        }
+
+        downloadedPanoramas.Clear();
+        panoramaDownloadIndex = 0;
+        panoramaDownloadErrors = 0;
+        Directory.CreateDirectory(PanoramaFolder);
+        EditorUtility.DisplayProgressBar("VOIDLINE Celestial Environment",
+            "Preparing official multicolour nebula maps…", 0f);
+        DownloadNextPanorama();
+    }
+
+    private static void DownloadNextPanorama()
+    {
+        if (panoramaDownloadIndex >= PanoramaUrls.Length)
+        {
+            EditorUtility.ClearProgressBar();
+            SaveDownloadedPanoramas();
+            return;
+        }
+
+        int index = panoramaDownloadIndex;
+        string path = PanoramaFolder + "/" + PanoramaFileNames[index];
+        EditorUtility.DisplayProgressBar("VOIDLINE Celestial Environment",
+            "Importing nebula panorama " + (index + 1) + " / " + PanoramaUrls.Length,
+            index / (float)PanoramaUrls.Length);
+
+        if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
+        {
+            ImportPanorama(path);
+            panoramaDownloadIndex++;
+            DownloadNextPanorama();
+            return;
+        }
+
+        UnityWebRequest request = UnityWebRequest.Get(PanoramaUrls[index]);
+        request.timeout = 90;
+        UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+        operation.completed += _ =>
+        {
+            try
+            {
+                if (request.result != UnityWebRequest.Result.Success ||
+                    request.downloadHandler == null || request.downloadHandler.data == null ||
+                    request.downloadHandler.data.Length < 1024 * 1024)
+                {
+                    panoramaDownloadErrors++;
+                    Debug.LogWarning("[VOIDLINE] Could not download " + PanoramaFileNames[index] +
+                        ": " + request.error + ". The old sky is not restored; use the configured fallback or retry.");
+                }
+                else
+                {
+                    File.WriteAllBytes(path, request.downloadHandler.data);
+                    ImportPanorama(path);
+                }
+            }
+            catch (Exception exception)
+            {
+                panoramaDownloadErrors++;
+                Debug.LogException(exception);
+            }
+            finally
+            {
+                request.Dispose();
+                panoramaDownloadIndex++;
+                DownloadNextPanorama();
+            }
+        };
+    }
+
+    private static void ImportPanorama(string path)
+    {
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+        TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (importer != null)
+        {
+            importer.textureType = TextureImporterType.Default;
+            importer.sRGBTexture = true;
+            importer.alphaSource = TextureImporterAlphaSource.None;
+            importer.mipmapEnabled = true;
+            importer.wrapMode = TextureWrapMode.Repeat;
+            importer.filterMode = FilterMode.Trilinear;
+            importer.anisoLevel = 4;
+            importer.maxTextureSize = 8192;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            importer.streamingMipmaps = true;
+            importer.SaveAndReimport();
+        }
+
+        Texture2D panorama = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (panorama != null && !downloadedPanoramas.Contains(panorama))
+            downloadedPanoramas.Add(panorama);
+    }
+
+    private static void SaveDownloadedPanoramas()
+    {
+        try
+        {
+            if (!Directory.Exists(ResourceFolder)) Directory.CreateDirectory(ResourceFolder);
+            VoidlineCelestialAssetSet set =
+                AssetDatabase.LoadAssetAtPath<VoidlineCelestialAssetSet>(ConfigPath);
+            if (set == null)
+            {
+                set = ScriptableObject.CreateInstance<VoidlineCelestialAssetSet>();
+                AssetDatabase.CreateAsset(set, ConfigPath);
+            }
+
+            SerializedObject serializedSet = new SerializedObject(set);
+            SerializedProperty property = serializedSet.FindProperty("spacePanoramas");
+            if (property != null)
+            {
+                property.arraySize = downloadedPanoramas.Count;
+                for (int i = 0; i < downloadedPanoramas.Count; i++)
+                    property.GetArrayElementAtIndex(i).objectReferenceValue = downloadedPanoramas[i];
+                serializedSet.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(set);
+                AssetDatabase.SaveAssets();
+            }
+
+            string message = "Imported " + downloadedPanoramas.Count + " multicolour Space Spheremaps panoramas.";
+            if (panoramaDownloadErrors > 0)
+                message += "\\n" + panoramaDownloadErrors + " download(s) failed; inspect the Console and retry.";
+            message += "\\n\\nThe asset set now references the actual panorama textures. Restart Play Mode to see the new environment.";
+            Debug.Log("[VOIDLINE] " + message.Replace("\\n", " "));
+            EditorUtility.DisplayDialog("VOIDLINE Celestial Environment", message, "OK");
+        }
+        finally
+        {
+            downloadedPanoramas.Clear();
+            EditorUtility.ClearProgressBar();
+        }
+    }
 
     [MenuItem("VOIDLINE/Environment/Build Celestial Asset Set")]
     public static void BuildCelestialAssetSet()
