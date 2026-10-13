@@ -145,15 +145,20 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
             Material importedSky = celestialAssetSet != null
                 ? celestialAssetSet.PickSpaceSkybox(routeDirector != null ? routeDirector.RunSeed : 260412)
                 : null;
-            Shader celestialShader = Shader.Find("Skybox/VOIDLINE Celestial Blend");
+            // Prefer a serialized Resources material. This keeps the custom shader referenced
+            // in player builds, where an otherwise Shader.Find-only shader can be stripped.
+            Material blendTemplate = Resources.Load<Material>("M_VOIDLINE_CelestialBlend");
+            Shader celestialShader = blendTemplate != null
+                ? blendTemplate.shader
+                : Shader.Find("Skybox/VOIDLINE Celestial Blend");
             bool installedCelestialSky = false;
             if (panorama != null && celestialShader != null)
             {
-                ownedSectorSkybox = new Material(celestialShader)
-                {
-                    name = "VOIDLINE / Layered Celestial Sky",
-                    hideFlags = HideFlags.DontSave
-                };
+                ownedSectorSkybox = blendTemplate != null
+                    ? new Material(blendTemplate)
+                    : new Material(celestialShader);
+                ownedSectorSkybox.name = "VOIDLINE / Layered Celestial Sky";
+                ownedSectorSkybox.hideFlags = HideFlags.DontSave;
                 ownedSectorSkybox.SetTexture("_TexA", panorama);
                 ownedSectorSkybox.SetTexture("_TexB", panorama);
                 ownedSectorSkybox.SetFloat("_Blend", 0f);
