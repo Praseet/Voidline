@@ -36,6 +36,9 @@ public static class VoidlineCelestialAssetBuilder
         List<Material> moons = new List<Material>();
         List<Material> stars = new List<Material>();
         List<Material> rings = new List<Material>();
+        List<Texture2D> planetTextures = new List<Texture2D>();
+        List<Texture2D> gasGiantTextures = new List<Texture2D>();
+        List<Texture2D> moonTextures = new List<Texture2D>();
 
         string[] materialGuids = AssetDatabase.FindAssets("t:Material");
         Array.Sort(materialGuids, StringComparer.Ordinal);
@@ -68,6 +71,30 @@ public static class VoidlineCelestialAssetBuilder
                 planets.Add(material);
         }
 
+        string[] textureGuids = AssetDatabase.FindAssets("t:Texture2D");
+        Array.Sort(textureGuids, StringComparer.Ordinal);
+        foreach (string guid in textureGuids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (texture == null) continue;
+            string name = texture.name.ToLowerInvariant();
+            string key = name + " " + path.ToLowerInvariant();
+
+            // Assign only colour/albedo maps to the sphere surface. A normal, ORM, roughness,
+            // metal, height or emission map must never be used as the base colour by accident.
+            if (ContainsAny(key, "normal", "_n.", "_n_", "orm", "roughness", "metallic",
+                "height", "specular", "emission", "mask", "ambient occlusion", "_ao", "bump"))
+                continue;
+
+            if (ContainsAny(key, "gas giant", "gasgiant", "jupiter", "saturn", "banded giant"))
+                gasGiantTextures.Add(texture);
+            else if (ContainsAny(key, "moon", "lunar", "cratered"))
+                moonTextures.Add(texture);
+            else if (ContainsAny(key, "planet", "terrestrial", "oceanic", "earth", "albedo", "diffuse"))
+                planetTextures.Add(texture);
+        }
+
         List<GameObject> planetPrefabs = new List<GameObject>();
         List<GameObject> gasGiantPrefabs = new List<GameObject>();
         List<GameObject> moonPrefabs = new List<GameObject>();
@@ -96,6 +123,9 @@ public static class VoidlineCelestialAssetBuilder
         AssignIfEmpty(serializedSet, "moonMaterials", moons);
         AssignIfEmpty(serializedSet, "starMaterials", stars);
         AssignIfEmpty(serializedSet, "ringMaterials", rings);
+        AssignIfEmpty(serializedSet, "planetTextures", planetTextures);
+        AssignIfEmpty(serializedSet, "gasGiantTextures", gasGiantTextures);
+        AssignIfEmpty(serializedSet, "moonTextures", moonTextures);
         AssignIfEmpty(serializedSet, "planetPrefabs", planetPrefabs);
         AssignIfEmpty(serializedSet, "gasGiantPrefabs", gasGiantPrefabs);
         AssignIfEmpty(serializedSet, "moonPrefabs", moonPrefabs);
@@ -113,6 +143,9 @@ public static class VoidlineCelestialAssetBuilder
             "\nMoon materials: " + moons.Count +
             "\nStar materials: " + stars.Count +
             "\nRing materials: " + rings.Count +
+            "\nPlanet colour textures: " + planetTextures.Count +
+            "\nGas giant colour textures: " + gasGiantTextures.Count +
+            "\nMoon colour textures: " + moonTextures.Count +
             "\nCelestial prefabs: " + (planetPrefabs.Count + gasGiantPrefabs.Count +
                 moonPrefabs.Count + starPrefabs.Count + ringPrefabs.Count) +
             "\n\nOpen the generated asset to review or change the selected source materials.";
@@ -129,6 +162,14 @@ public static class VoidlineCelestialAssetBuilder
     }
 
     private static void AssignIfEmpty(SerializedObject asset, string propertyName, List<GameObject> candidates)
+    {
+        SerializedProperty property = asset.FindProperty(propertyName);
+        if (property == null || property.arraySize != 0 || candidates.Count == 0) return;
+        property.arraySize = candidates.Count;
+        for (int i = 0; i < candidates.Count; i++) property.GetArrayElementAtIndex(i).objectReferenceValue = candidates[i];
+    }
+
+    private static void AssignIfEmpty(SerializedObject asset, string propertyName, List<Texture2D> candidates)
     {
         SerializedProperty property = asset.FindProperty(propertyName);
         if (property == null || property.arraySize != 0 || candidates.Count == 0) return;
