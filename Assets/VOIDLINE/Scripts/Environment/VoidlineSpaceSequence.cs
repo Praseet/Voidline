@@ -12,7 +12,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
 {
     [Header("Authored Space Backdrop")]
     [SerializeField] private bool installSpaceSkybox = true;
-    [SerializeField, Range(0.2f, 1.2f)] private float ambientLightScale = 0.46f;
+    [SerializeField, Range(0.2f, 1.2f)] private float ambientLightScale = 0.54f;
 
     [Header("Landmark Rhythm")]
     [SerializeField, Min(1f)] private float firstLandmarkDistance = 12f;
@@ -69,6 +69,8 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
     private CorridorScroller corridorScroller;
     private VoidlineRouteDirector routeDirector;
     private VoidlineGameManager gameManager;
+    private VoidlineCelestialAssetSet celestialAssetSet;
+    private VoidlineCelestialBackdrop celestialBackdrop;
     private GameObject activeLandmark;
     private readonly List<GameObject> backdropRocks = new List<GameObject>(3);
     private System.Random backdropRandom;
@@ -118,29 +120,34 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         previousAmbientIntensity = RenderSettings.ambientIntensity;
         previousFog = RenderSettings.fog;
 
+        celestialAssetSet = Resources.Load<VoidlineCelestialAssetSet>("VOIDLINE_CelestialAssetSet")
+            ?? celestialAssetSet;
+
         if (installSpaceSkybox)
         {
-            // Use the locally installed SpaceSkies Free material when available. Public source
-            // repositories must not bundle its licensed source textures, so a self-contained
-            // procedural panorama is created when those optional local assets are absent.
-            Material darkSpaceSky = Resources.Load<Material>("M_VOIDLINE_DarkSpace");
-            if (darkSpaceSky != null && HasCompleteSixSidedSkybox(darkSpaceSky))
+            // The old dark panorama is retired. Prefer the imported 4K celestial skybox,
+            // which carries stars/nebula/galaxies behind the authored 3D planetary layer.
+            Material spaceSky = celestialAssetSet != null
+                ? celestialAssetSet.PickSpaceSkybox(routeDirector != null ? routeDirector.RunSeed : 260412)
+                : null;
+            if (spaceSky != null && HasCompleteSixSidedSkybox(spaceSky))
             {
-                // Transitions mutate a private material instance, never the imported asset.
-                ownedSectorSkybox = new Material(darkSpaceSky)
+                ownedSectorSkybox = new Material(spaceSky)
                 {
-                    name = "VOIDLINE / Runtime Sector Sky",
+                    name = "VOIDLINE / Runtime Celestial Sky",
                     hideFlags = HideFlags.DontSave
                 };
                 RenderSettings.skybox = ownedSectorSkybox;
             }
             else
             {
+                // Clean checkouts without the optional art pack use a colourful fallback,
+                // not the former near-black panorama.
                 runtimeFallbackSkybox = CreateProceduralFallbackSkybox(out runtimeFallbackSkyTexture);
                 if (runtimeFallbackSkybox != null)
                     RenderSettings.skybox = runtimeFallbackSkybox;
                 else
-                    Debug.LogWarning("VOIDLINE could not find a valid skybox or the built-in Panoramic shader.");
+                    Debug.LogWarning("VOIDLINE could not find an authored celestial skybox or the built-in Panoramic shader.");
             }
 
             activeSkyboxMaterial = RenderSettings.skybox;
@@ -149,15 +156,21 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 baseSkyTint = activeSkyboxMaterial.HasProperty("_Tint")
                     ? activeSkyboxMaterial.GetColor("_Tint")
                     : Color.white;
-                sectorSkyStartTint = baseSkyTint;
-                sectorSkyTargetTint = baseSkyTint;
+                baseSkyTint = MultiplySkyTint(baseSkyTint, new Color(1f, 1.035f, 1.08f, 1f));
                 baseSkyExposure = activeSkyboxMaterial.HasProperty("_Exposure")
                     ? activeSkyboxMaterial.GetFloat("_Exposure")
                     : 1f;
+                baseSkyExposure = Mathf.Clamp(baseSkyExposure * 1.06f, 0.05f, 2.5f);
+                if (activeSkyboxMaterial.HasProperty("_Tint"))
+                    activeSkyboxMaterial.SetColor("_Tint", baseSkyTint);
+                if (activeSkyboxMaterial.HasProperty("_Exposure"))
+                    activeSkyboxMaterial.SetFloat("_Exposure", baseSkyExposure);
+                sectorSkyStartTint = baseSkyTint;
+                sectorSkyTargetTint = baseSkyTint;
                 sectorSkyStartExposure = baseSkyExposure;
                 sectorSkyTargetExposure = baseSkyExposure;
                 RenderSettings.ambientMode = AmbientMode.Skybox;
-                RenderSettings.ambientIntensity = Mathf.Min(ambientLightScale, 0.46f);
+                RenderSettings.ambientIntensity = Mathf.Clamp(ambientLightScale, 0.38f, 0.62f);
                 baseSectorAmbientIntensity = RenderSettings.ambientIntensity;
                 sectorAmbientStart = baseSectorAmbientIntensity;
                 sectorAmbientTarget = baseSectorAmbientIntensity;
@@ -169,11 +182,13 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         nextLandmarkAt = firstLandmarkDistance;
         nextBackdropRockAt = firstBackdropRockDistance;
         backdropRandom = new System.Random(routeDirector != null ? routeDirector.RunSeed ^ 0x5EED : 260412);
-        // Start with one short transit-entry beat. It fades away by route distance and is
-        // permanently retired; landmark passages can never resurrect corridor geometry.
-        tunnelRetired = false;
-        tunnelVisibility = 1f;
-        ApplyTunnelVisibility(1f);
+        celestialBackdrop = GetComponent<VoidlineCelestialBackdrop>();
+        if (celestialBackdrop == null) celestialBackdrop = gameObject.AddComponent<VoidlineCelestialBackdrop>();
+        celestialBackdrop.Initialize(routeDirector, celestialAssetSet, routeDirector != null ? routeDirector.RunSeed : 260412);
+        // Begin with the full celestial world visible. The removed corridor must not flash at run start.
+        tunnelRetired = true;
+        tunnelVisibility = 0f;
+        ApplyTunnelVisibility(0f);
         sequenceInitialized = true;
         if (resetRequestedBeforeAwake)
         {
@@ -235,10 +250,10 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
                 band *= Mathf.Clamp01(turbulence) * polarFade;
                 float filament = Mathf.Pow(Mathf.Clamp01(1f - Mathf.Abs(bandDistance + 0.17f * Mathf.Sin(u * 27f)) * 2.2f), 3f);
                 float dust = band * (0.015f + Mathf.Clamp01(turbulence) * 0.045f);
-                Color c = new Color(0.0015f, 0.0025f, 0.009f);
-                c += new Color(0.018f, 0.006f, 0.055f) * dust * 2.6f;
-                c += new Color(0.004f, 0.035f, 0.075f) * band * 0.42f;
-                c += new Color(0.07f, 0.026f, 0.11f) * filament * band * 0.18f;
+                Color c = new Color(0.006f, 0.010f, 0.026f);
+                c += new Color(0.065f, 0.025f, 0.16f) * dust * 3.8f;
+                c += new Color(0.018f, 0.11f, 0.24f) * band * 0.92f;
+                c += new Color(0.22f, 0.075f, 0.38f) * filament * band * 0.32f;
                 pixels[y * width + x] = c;
             }
         }
@@ -515,9 +530,10 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         nextLandmarkAt = firstLandmarkDistance;
         nextBackdropRockAt = firstBackdropRockDistance;
         backdropRandom = new System.Random(routeDirector != null ? routeDirector.RunSeed ^ 0x5EED : 260412);
-        tunnelRetired = false;
-        tunnelVisibility = 1f;
-        ApplyTunnelVisibility(1f);
+        if (celestialBackdrop != null) celestialBackdrop.ResetForRun(routeDirector != null ? routeDirector.RunSeed : 260412);
+        tunnelRetired = true;
+        tunnelVisibility = 0f;
+        ApplyTunnelVisibility(0f);
     }
 
     private void CacheTunnelState()
@@ -586,6 +602,7 @@ public sealed class VoidlineSpaceSequence : MonoBehaviour
         float speed = corridorScroller != null ? corridorScroller.Speed : 12f;
         float distanceStep = Mathf.Max(0f, speed * dt);
         distanceTravelled += distanceStep;
+        if (celestialBackdrop != null) celestialBackdrop.Tick(distanceStep, dt);
 
         if (activeLandmark != null)
         {
